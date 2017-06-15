@@ -123,6 +123,7 @@ private:
   int       doResponse(int nCmd, int nErrorCode, int nErrStatus = 0);
   int       doTransmitPlayLogin(int nPlayerSock, int nDBCameraID, CLiveServer * lpServer);
   int       doTransmitLiveVary(int nDBCameraID, int nUserCount);
+  int       doReturnPlayLogin(char * lpRtmpUrl);
   
   CClient     * FindGatherByMAC(const char * lpMacAddr);
   CLiveServer * FindLiveServer(int nDBCameraID);
@@ -561,10 +562,10 @@ int CClient::doPlayClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
   // 解析播放终端发送的JSON数据包...
   int nErrorCode = this->parsePlayJson(lpHeader, lpJsonPtr);
   // 如果没有错误，直接返回，等待采集端将处理结果反馈给播放器...
-  if( nErrorCode == ERR_OK )
-    return 0;
+  if( nErrorCode <= ERR_OK )
+    return nErrorCode;
   // 如果有错误，直接反馈执行结果，不要通知采集端...
-  assert( nErrorCode != ERR_OK );
+  assert( nErrorCode > ERR_OK );
   return this->doResponse(lpHeader->m_cmd, nErrorCode);
 }
 //
@@ -596,10 +597,17 @@ int CClient::parsePlayJson(Cmd_Header * lpHeader, const char * lpJsonPtr)
   assert( lpGather != NULL );
   // 转发播放器登录命令到采集端...
   assert( this->m_nClientType == kClientPlay );
-  return lpGather->doTransmitPlayLogin(m_nConnFD, nRtmpLive, lpServer);
+  int nErrorCode = lpGather->doTransmitPlayLogin(m_nConnFD, nRtmpLive, lpServer);
+  if( nErrorCode != ERR_OK )
+    return nErrorCode;
+  // 转发命令发送成功，直接返回给播放器 rtmp 地址，无需等待采集端的转发...
+  char szRtmpURL[256] = {0};
+  string & strRtmpAddr = lpServer->m_strRtmpAddr;
+  sprintf(szRtmpURL, "rtmp://%s/live/live%d", strRtmpAddr.c_str(), nRtmpLive);
+  return this->doReturnPlayLogin(szRtmpURL);
 }
 //
-// 转发播放器登录命令到采集端...
+// 转发播放器登录命令到采集端 => 这里是采集端对象...
 int CClient::doTransmitPlayLogin(int nPlayerSock, int nDBCameraID, CLiveServer * lpServer)
 {
   // 判断输入数据的有效性...
@@ -649,7 +657,41 @@ int CClient::doTransmitPlayLogin(int nPlayerSock, int nDBCameraID, CLiveServer *
     log_error("== file: %s, line: %d, mod socket '%d' to epoll failed: %s ==\n", __FILE__, __LINE__, m_nConnFD, strerror(errno));
     return ERR_SOCK_SEND;
   }
-  // 发送成功，反馈正确结果...
+  // 返回执行正确...
+  return ERR_OK;
+}
+//
+// 直接反馈直播地址给播放器，无需等待采集端的反馈，避免php阻塞 => 这里是播放器对象...
+int CClient::doReturnPlayLogin(char * lpRtmpUrl)
+{
+  // 这里需要特别注意 => 转发给PHP客服端的数据都需要加上TrackerHeader，便于PHP扩展接收数据...
+  TrackerHeader theTracker = {0};
+  char szSendBuf[MAX_LINE] = {0};
+  // 组合反馈的json数据包...
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "rtmp_url", json_object_new_string(lpRtmpUrl));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  int nBodyLen = strlen(lpNewJson);
+  // 组合TrackerHeader包头，方便php扩展使用 => 只需要设置pkg_len，其它置0...
+  long2buff(nBodyLen, theTracker.pkg_len);
+  memcpy(szSendBuf, &theTracker, sizeof(theTracker));
+  memcpy(szSendBuf+sizeof(theTracker), lpNewJson, nBodyLen);
+  // 将发送数据包缓存起来，等待发送事件到来...
+  assert( m_nClientType == kClientPlay );
+  m_strSend.assign(szSendBuf, nBodyLen+sizeof(theTracker));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 准备修改事件需要的数据...
+  struct epoll_event evClient = {0};
+  evClient.data.fd = m_nConnFD;
+  evClient.events = EPOLLOUT | EPOLLET;
+  // 重新修改事件，加入写入事件...
+  if( epoll_ctl(g_kdpfd, EPOLL_CTL_MOD, m_nConnFD, &evClient) < 0 ) {
+    log_error("== file: %s, line: %d, mod socket '%d' to epoll failed: %s ==\n", __FILE__, __LINE__, m_nConnFD, strerror(errno));
+    return -1;
+  }
+  // 返回0，等待写入事件...
   return ERR_OK;
 }
 //
@@ -708,8 +750,9 @@ int CClient::doGatherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     m_strMacGather = m_MapJson["mac_addr"];
     m_strSinAddr = m_MapJson["ip_addr"];
   } else {
+    // 2017.06.15 - by jackey => 取消了采集端延时转发给播放器的命令，避免php阻塞...
     // 判断PHP客户端是否有效，没有找到，记录，直接返回...
-    CClient * lpClient = NULL;
+    /*CClient * lpClient = NULL;
     GM_MapConn::iterator itorPHP = g_MapConnect.find(lpHeader->m_sock);
     if( itorPHP == g_MapConnect.end() ) {
       log_error("== file: %s, line: %d, php client closed! ==\n", __FILE__, __LINE__);
@@ -739,7 +782,7 @@ int CClient::doGatherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     if( epoll_ctl(g_kdpfd, EPOLL_CTL_MOD, lpClient->m_nConnFD, &evClient) < 0 ) {
       log_error("== file: %s, line: %d, mod socket '%d' to epoll failed: %s ==\n", __FILE__, __LINE__, lpClient->m_nConnFD, strerror(errno));
       return 0;
-    }
+    }*/
   }
   return 0;
 }
