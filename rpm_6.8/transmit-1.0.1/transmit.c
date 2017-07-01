@@ -383,6 +383,7 @@ int CClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
         break;
       }
       // 有些命令需要等待Gather反馈给PHP，因此，直接返回 => 这里不需要更改事件，仍然是EPOLLIN事件...
+      // 2017.07.01 - by jackey => 这里只会发生 kCmd_PHP_Get_Course_Record 事件，kCmd_PHP_Get_Camera_Status不会被调用了...
       if( lpHeader->m_cmd == kCmd_PHP_Get_Camera_Status || lpHeader->m_cmd == kCmd_PHP_Get_Course_Record ) {
         return 0;
       }
@@ -751,14 +752,15 @@ int CClient::doGatherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     m_strSinAddr = m_MapJson["ip_addr"];
   } else {
     // 2017.06.15 - by jackey => 取消了采集端延时转发给播放器的命令，避免php阻塞...
+    // 2017.07.01 - by jackey => php客户端的 kCmd_PHP_Get_Course_Record 命令依然需要中转...
     // 判断PHP客户端是否有效，没有找到，记录，直接返回...
-    /*CClient * lpClient = NULL;
+    CClient * lpClient = NULL;
     GM_MapConn::iterator itorPHP = g_MapConnect.find(lpHeader->m_sock);
     if( itorPHP == g_MapConnect.end() ) {
       log_error("== file: %s, line: %d, php client closed! ==\n", __FILE__, __LINE__);
       return 0;
     }
-    // 获得需要反馈的客户端对象 => 可能是播放器客户端，也可能是php客户端...
+    // 获得需要反馈的客户端对象 => 只可能是php客户端的 kCmd_PHP_Get_Course_Record 命令...
     lpClient = itorPHP->second; assert( lpClient != NULL );
     assert( lpClient->m_nConnFD == lpHeader->m_sock );
     // 得到Gather反馈回来的json数据包 => 有效性已经在前面验证过了...
@@ -782,7 +784,7 @@ int CClient::doGatherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     if( epoll_ctl(g_kdpfd, EPOLL_CTL_MOD, lpClient->m_nConnFD, &evClient) < 0 ) {
       log_error("== file: %s, line: %d, mod socket '%d' to epoll failed: %s ==\n", __FILE__, __LINE__, lpClient->m_nConnFD, strerror(errno));
       return 0;
-    }*/
+    }
   }
   return 0;
 }
@@ -890,7 +892,7 @@ int main(int argc, char **argv)
           int connfd = accept(listenfd, (struct sockaddr *)&cliaddr, &socklen);
           // 发生错误，直接记录，继续...
           if( connfd < 0 ) {
-            log_error("== file: %s, line: %d, accept error(%d) ==\n", __FILE__, __LINE__, errno);
+            //log_error("== file: %s, line: %d, accept error(%d) ==\n", __FILE__, __LINE__, errno);
             break;
           }
           // eqoll队列超过最大值，关闭，继续...
@@ -917,7 +919,7 @@ int main(int argc, char **argv)
           ++curfds; ++acceptCount;
           int nSinPort = cliaddr.sin_port;
           string strSinAddr = inet_ntoa(cliaddr.sin_addr);
-          log_error("== file: %s, line: %d, client count(%d) - increase, accept from %s:%d ==\n", __FILE__, __LINE__, acceptCount, strSinAddr.c_str(), nSinPort);
+          //log_error("== file: %s, line: %d, client count(%d) - increase, accept from %s:%d ==\n", __FILE__, __LINE__, acceptCount, strSinAddr.c_str(), nSinPort);
           // 创建客户端对象,并保存到集合当中...
           CClient * lpClient = new CClient(connfd, nSinPort, strSinAddr);
           g_MapConnect[connfd] = lpClient;
@@ -945,7 +947,7 @@ int main(int argc, char **argv)
           // 关闭连接，减少引用，打印事件...
           close(nCurEventFD);
           --curfds; --acceptCount;
-          log_error("== file: %s, line: %d, client count(%d) - decrease ==\n", __FILE__, __LINE__, acceptCount);
+          //log_error("== file: %s, line: %d, client count(%d) - decrease ==\n", __FILE__, __LINE__, acceptCount);
         }
       }
     }
