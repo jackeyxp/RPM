@@ -3,14 +3,19 @@ CentOS6.8版本
 
 2017.07.05
 ==========================================
-1. --with-openssl=../openssl-1.0.1f --with-openssl-opt="enable-tlsext" => 一个443支持多个https域名，公司网站需要用到
-2. 新增TLS的SNI扩展，可以支持多个https域名，这个功能只是公司网站用，不用更新到all或tracker或storage当中，需要时再编译；
-3. 编译方法详见《浩一监控技术总结.doc》 => F. 编译nginx和ngx_cache_purge => Tracker
-4. 编译参考 => http://www.jianshu.com/p/d40e249774ff
+1. 对所有的部件进行了重新编译，更新到阿里云服务器上。
 
 2017.07.04
 ==========================================
+1. --with-openssl=../openssl-1.0.1f --with-openssl-opt="enable-tlsext" => 一个443支持多个https域名，公司网站需要用到 nginx-all 版本；
+2. 新增TLS的SNI扩展，可以支持多个https域名，这个功能只是公司网站用，不用更新到all或tracker或storage当中，需要时再编译；
+3. 编译方法详见《浩一监控技术总结.doc》 => G. 编译nginx => All
+4. 编译参考 => http://www.jianshu.com/p/d40e249774ff
+
+2017.07.03
+==========================================
 1. srs => 修改了代码，支持http_hooks回调时，将问号前后的数据分离；与nginx-rtmp保持一致；
+2. transmit => 修改了录像状态的bug。
 
 2017.07.01
 ==========================================
