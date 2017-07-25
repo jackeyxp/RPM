@@ -26,7 +26,7 @@ using namespace std;
 // valgrind --tool=memcheck --leak-check=full --show-reachable=yes ./transmit
 
 #define SERVER_PORT           21001
-#define MAX_LINE               2048
+#define MAX_LINE          20 * 2048  // 2017.07.25 - by jackey => 避免录像任务命令，造成溢出...
 #define MAX_LISTEN             1024
 #define MAX_EPOLL_SIZE         1024
 #define MAX_TIME_OUT      30 * 1000
