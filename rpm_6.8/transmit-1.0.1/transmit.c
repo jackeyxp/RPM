@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include <sys/types.h>      /* basic system data types */
 #include <sys/socket.h>     /* basic socket definitions */
+#include <netinet/tcp.h>    /* 2017.07.26 - by jackey */
 #include <netinet/in.h>     /* sockaddr_in{} and other Internet defns */
 #include <arpa/inet.h>      /* inet(3) functions */
 #include <sys/epoll.h>      /* epoll function */
@@ -26,10 +27,10 @@ using namespace std;
 // valgrind --tool=memcheck --leak-check=full --show-reachable=yes ./transmit
 
 #define SERVER_PORT           21001
-#define MAX_LINE          20 * 2048  // 2017.07.25 - by jackey => 避免录像任务命令，造成溢出...
+#define MAX_LINE          64 * 1024  // 2017.07.25 - by jackey => 避免录像任务命令，造成溢出...
 #define MAX_LISTEN             1024
 #define MAX_EPOLL_SIZE         1024
-#define MAX_TIME_OUT      30 * 1000
+#define MAX_TIME_OUT      10 * 1000
 
 void handleTimeout();
 void clearAllServer();
@@ -37,6 +38,7 @@ void clearAllClient();
 int  handleRead(int connfd);
 int  handleWrite(int connfd);
 int  setnonblocking(int sockfd);
+int  gettcpstate(int sockfd);
 int64_t buff2long(const char *buff);
 void long2buff(int64_t n, char *buff);
 int  log_error(const char *msg, ...);
@@ -117,7 +119,7 @@ private:
   int       doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr);      // 处理PHP客户端事件...
   int       doLiveClient(Cmd_Header * lpHeader, const char * lpJsonPtr);     // 处理Live服务器事件...
   int       doPlayClient(Cmd_Header * lpHeader, const char * lpJsonPtr);     // 处理Play播放器事件...
-  int       doGatherClient(Cmd_Header * lpHeader, const char * lpJsonPtr);   // 处理采集端事件...
+  int       doGatherClient(Cmd_Header * lpHeader, const char * lpJsonPtr);   // 处理采集端事件 => 长链接，需要检测...
   int       parseLiveJson(Cmd_Header * lpHeader, const char * lpJsonPtr);    // 解析直播服务器发送的JSON数据包...
   int       parsePlayJson(Cmd_Header * lpHeader, const char * lpJsonPtr);    // 解析播放终端发送的JSON数据包...
   int       doResponse(int nCmd, int nErrorCode, int nErrStatus = 0);
@@ -965,6 +967,21 @@ int main(int argc, char **argv)
 // 处理超时的情况...
 void handleTimeout()
 {
+  // 2017.07.26 - by jackey => 根据连接状态删除客户端...
+  // 遍历所有的连接，判断是否有效，无效直接删除...
+  CClient * lpClient = NULL;
+  GM_MapConn::iterator itorConn;
+  itorConn = g_MapConnect.begin();
+  while( itorConn != g_MapConnect.end() ) {
+    lpClient = itorConn->second;
+    if( !gettcpstate(itorConn->first) ) {
+      log_error("== file: %s, line: %d, client type(%d) be killed by handleTimeout() ==\n", __FILE__, __LINE__, lpClient->m_nClientType);
+      delete lpClient; lpClient = NULL;
+      g_MapConnect.erase(itorConn++);
+    } else {
+      ++itorConn;
+    }
+  }
   // 遍历所有的直播服务器，判断是否发生了超时...
   GM_MapServer::iterator itorItem;
   CLiveServer * lpServer = NULL;
@@ -1036,6 +1053,16 @@ int setnonblocking(int sockfd)
 		return -1;
 	}
 	return 0;
+}
+//
+// 得到tcp的连接状态...
+int gettcpstate(int sockfd)
+{
+  struct tcp_info info = {0};
+  int optlen = sizeof(struct tcp_info);
+  if( getsockopt(sockfd, IPPROTO_TCP, TCP_INFO, &info, (socklen_t *)&optlen) < 0 )
+    return false;
+  return ((info.tcpi_state == TCP_ESTABLISHED) ? true : false);
 }
 //
 // write log function => transmit.log...
