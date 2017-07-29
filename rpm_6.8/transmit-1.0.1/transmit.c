@@ -196,7 +196,7 @@ int CClient::ForRead()
   }
   // 读取失败，返回错误，让上层关闭...
   if( nReadLen < 0 ) {
-		log_error("== file: %s, line: %d, read error ==\n", __FILE__, __LINE__);
+		log_error("== client type: %d, file: %s, line: %d, read error(%s) ==\n", m_nClientType, __FILE__, __LINE__, strerror(errno));
     return -1;
   }
 	// 追加读取数据并构造解析头指针...
