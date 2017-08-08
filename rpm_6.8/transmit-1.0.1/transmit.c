@@ -347,7 +347,7 @@ int CClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
   int nErrorCode = ERR_NO_MAC_ADDR;
   int nErrStatus = kGatherOffLine;
   // 检测输入参数MAC地址的有效性 => 没有找到MAC地址，直接返回错误...
-  if( m_MapJson.find("mac_addr") == m_MapJson.end() ) {
+  if( (m_MapJson.find("mac_addr") == m_MapJson.end()) || (m_MapJson["mac_addr"].size() <= 0) ) {
     return this->doResponse(lpHeader->m_cmd, nErrorCode, nErrStatus);
   }
   // 得到有效的当前MAC地址...
@@ -575,9 +575,10 @@ int CClient::doPlayClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
 // 解析播放终端发送的JSON数据包...
 int CClient::parsePlayJson(Cmd_Header * lpHeader, const char * lpJsonPtr)
 {
-  // 判断解析出来的数据对象是否有效...
+  // 判断解析出来的数据对象是否有效，mac地址为空也返回错误...
   if( m_MapJson.find("mac_addr") == m_MapJson.end() ||
-    m_MapJson.find("rtmp_live") == m_MapJson.end() ) {
+    m_MapJson.find("rtmp_live") == m_MapJson.end() ||
+    m_MapJson["mac_addr"].size() <= 0 ) {
     return ERR_NO_JSON;
   }
   // rtmp_live => 数据库当中的摄像头编号(DBCameraID)
@@ -701,10 +702,14 @@ int CClient::doReturnPlayLogin(char * lpRtmpUrl)
 // 根据MAC地址查找采集端...
 CClient * CClient::FindGatherByMAC(const char * lpMacAddr)
 {
+  // 传入地址为空，返回空值...
+  if( lpMacAddr == NULL || strlen(lpMacAddr) <= 0 )
+    return NULL;
   GM_MapConn::iterator itorConn;
   for(itorConn = g_MapConnect.begin(); itorConn != g_MapConnect.end(); ++itorConn) {
     CClient * lpClient = itorConn->second;
-    if( strcasecmp(lpMacAddr, lpClient->m_strMacGather.c_str()) == 0 ) {
+    // 客户端必须是采集端，并且mac地址是一致的...
+    if( (lpClient->m_nClientType == kClientGather) && (strcasecmp(lpMacAddr, lpClient->m_strMacGather.c_str()) == 0) ) {
       return lpClient;
     }
   }
@@ -746,7 +751,8 @@ int CClient::doGatherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
   if( lpHeader->m_cmd == kCmd_Gather_Login ) {
     // 处理采集端登录过程 => 判断传递JSON数据有效性...
     if( m_MapJson.find("mac_addr") == m_MapJson.end() ||
-      m_MapJson.find("ip_addr") == m_MapJson.end() ) {
+      m_MapJson.find("ip_addr") == m_MapJson.end() ||
+      m_MapJson["mac_addr"].size() <= 0 ) {
       return -1;
     }
     // 保存解析到的有效JSON数据项...
