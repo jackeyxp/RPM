@@ -49,6 +49,8 @@ enum {
   kCmd_PHP_Get_All_Client     = 12,
   kCmd_PHP_Get_Live_Server    = 13,
   kCmd_Live_Quit              = 14,
+  kCmd_PHP_Start_Camera       = 15,
+  kCmd_PHP_Stop_Camera        = 16,
 };
 //
 // define the command header...
