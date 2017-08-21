@@ -87,11 +87,11 @@ void CLiveServer::ResetTimeout()
   m_nStartTime = time(NULL);
 }
 //
-// 判断是否已经超时 => 10分钟没有汇报，就认为是超时...
+// 判断是否已经超时 => 5分钟没有汇报，就认为是超时...
 bool CLiveServer::IsTimeout()
 {
   time_t nDeltaTime = time(NULL) - m_nStartTime;
-  return ((nDeltaTime >= 10 * 60) ? true : false);
+  return ((nDeltaTime >= 5 * 60) ? true : false);
 }
 //
 // 更新直播服务器上通道上的用户数...
