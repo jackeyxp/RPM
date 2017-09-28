@@ -1,6 +1,12 @@
 CentOS6.8版本
 ==========================================
 
+2017.09.28
+==========================================
+1. srs => 8080端口传输.m3u8和.ts文件时，支持跨域访问
+   srs传输.m3u8时 => protocol\srs_http_stack.cpp:349 => w->header()->set("Access-Control-Allow-Origin", "*");
+   srs传输.ts时   => app\srs_app_http_stream.cpp:483 => w->header()->set("Access-Control-Allow-Origin", "*");
+
 2017.08.21
 ==========================================
 1. transmit => 判断超时时间设置为5分钟，以前是10分钟；
