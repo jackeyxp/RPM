@@ -12,6 +12,13 @@
 #define ERR_NO_MAC_ADDR 10007
 
 //
+// define player type...
+enum {
+  kFlash    = 0,
+  kHTML5    = 1,
+};
+
+//
 // define gather status...
 enum {
   kGatherOffLine   = 0,
@@ -35,22 +42,23 @@ enum {
 //
 // define command id...
 enum {
-  kCmd_Gather_Login			    	= 1,
+  kCmd_Gather_Login				    = 1,
   kCmd_PHP_Get_Camera_Status	= 2,
   kCmd_PHP_Set_Camera_Name		= 3,
   kCmd_PHP_Set_Course_Add		  = 4,
   kCmd_PHP_Set_Course_Mod		  = 5,
   kCmd_PHP_Set_Course_Del		  = 6,
-  kCmd_PHP_Get_Gather_Status  = 7,
-  kCmd_PHP_Get_Course_Record  = 8,
-  kCmd_Live_Login             = 9,
-  kCmd_Live_Vary              = 10,
-  kCmd_Play_Login             = 11,
-  kCmd_PHP_Get_All_Client     = 12,
-  kCmd_PHP_Get_Live_Server    = 13,
-  kCmd_Live_Quit              = 14,
-  kCmd_PHP_Start_Camera       = 15,
-  kCmd_PHP_Stop_Camera        = 16,
+  kCmd_PHP_Get_Gather_Status	= 7,
+  kCmd_PHP_Get_Course_Record	= 8,
+  kCmd_PHP_Get_All_Client		  = 9,
+  kCmd_PHP_Get_Live_Server		= 10,
+  kCmd_PHP_Start_Camera			  = 11,
+  kCmd_PHP_Stop_Camera			  = 12,
+  kCmd_Live_Login				      = 13,
+  kCmd_Live_Vary				      = 14,
+  kCmd_Live_Quit				      = 15,
+  kCmd_Play_Login				      = 16,
+  kCmd_Play_Verify				    = 17,
 };
 //
 // define the command header...
