@@ -49,8 +49,9 @@ const char * get_command_name(int inCmd);
 int handleTransmitLiveVary(int nDBCameraID, int nUserCount);
 
 // 定义日志处理函数和宏...
-bool do_trace(const char * inFile, int inLine, const char *msg, ...);
-#define log_trace(msg, ...) do_trace(__FILE__, __LINE__, msg, ##__VA_ARGS__)
+bool do_trace(const char * inFile, int inLine, bool bIsDebug, const char *msg, ...);
+#define log_trace(msg, ...) do_trace(__FILE__, __LINE__, false, msg, ##__VA_ARGS__)
+#define log_debug(msg, ...) do_trace(__FILE__, __LINE__, true, msg, ##__VA_ARGS__)
 
 class CClient;
 class CPlayer;
@@ -96,6 +97,7 @@ CPlayer::CPlayer(int nPlayerID, int nPlayerType)
 // 重置超时计时器...
 void CPlayer::ResetTimeout()
 {
+  //log_debug("Player ResetTimeout(ID: %d, Type: %s)", m_nPlayerID, m_nPlayerType ? "HTML5" : "Flash");
   m_nStartTime = time(NULL);  
 }
 //
@@ -103,10 +105,13 @@ void CPlayer::ResetTimeout()
 // 备注：只有HTML5播放器才需要检测是否超时...
 bool CPlayer::IsTimeout()
 {
-  if( m_nPlayerType == kFlash )
+  if( m_nPlayerType == kFlash ) {
+    //log_debug("Player IsTimeout(ID: %d, Type: %s, false)", m_nPlayerID, m_nPlayerType ? "HTML5" : "Flash");
     return false;
+  }
   // 只有HTML5播放器才需要检测是否超时...
   time_t nDeltaTime = time(NULL) - m_nStartTime;
+  //log_debug("Player IsTimeout(ID: %d, Type: %s, Delta: %d second)", m_nPlayerID, m_nPlayerType ? "HTML5" : "Flash", nDeltaTime);
   return ((nDeltaTime >= PLAY_TIME_OUT) ? true : false);  
 }
 
@@ -1172,6 +1177,8 @@ int main(int argc, char **argv)
 	}
   // print startup log...
   log_trace("transmit-server startup, port %d, max-connection is %d, backlog is %d", SERVER_PORT, MAX_EPOLL_SIZE, MAX_LISTEN);
+  // handleTimeout needed data...
+  time_t myStartTime = time(NULL);
   // begin the epoll event...
   while( true ) {
 		// wait for epoll event...
@@ -1186,11 +1193,19 @@ int main(int argc, char **argv)
       assert( errno != EINTR );
       break;
 		}
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // 处理超时的情况 => 释放一些已经死掉的资源...
-    if( nfds == 0 ) {
+    // 注意：这里的超时，是一种时钟，每隔10秒自动执行一次，不能只处理事件超时，要自行处理...
+    // 以前的写法会造成只要2个以上有效用户就永远无法处理超时过程，因为还没超时，就有新事件到达了...
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    time_t nDeltaTime = time(NULL) - myStartTime;
+    if( nDeltaTime >= WAIT_TIME_OUT/1000 ) {
+      myStartTime = time(NULL);
       handleTimeout();
-      continue;
     }
+    // 刚好是超时事件，直接返回...
+    if( nfds == 0 )
+      continue;
     // 处理正确返回值的情况...
     for(int n = 0; n < nfds; ++n) {
       // 处理服务器socket事件...
@@ -1277,6 +1292,9 @@ int main(int argc, char **argv)
 // 处理超时的情况...
 void handleTimeout()
 {
+  // 打印调试记录信息...
+  //log_debug("handleTimeout: Connect(%d), SrsServer(%d)", g_MapConnect.size(), g_MapServer.size());
+
   // 2017.07.26 - by jackey => 根据连接状态删除客户端...
   // 遍历所有的连接，判断是否有效，无效直接删除...
   CClient * lpClient = NULL;
@@ -1285,7 +1303,7 @@ void handleTimeout()
   while( itorConn != g_MapConnect.end() ) {
     lpClient = itorConn->second;
     if( !gettcpstate(itorConn->first) ) {
-      log_trace("client type(%d) be killed by handleTimeout()", lpClient->m_nClientType);
+      log_trace("client type(%s) be killed by handleTimeout()", get_client_type(lpClient->m_nClientType));
       delete lpClient; lpClient = NULL;
       g_MapConnect.erase(itorConn++);
     } else {
@@ -1378,7 +1396,7 @@ int gettcpstate(int sockfd)
 }
 //
 // 全新的日志处理函数...
-bool do_trace(const char * inFile, int inLine, const char *msg, ...)
+bool do_trace(const char * inFile, int inLine, bool bIsDebug, const char *msg, ...)
 {
   // 准备日志头需要的时间信息...
   timeval tv;
@@ -1393,16 +1411,20 @@ bool do_trace(const char * inFile, int inLine, const char *msg, ...)
   int  log_size = -1;
   char log_data[LOG_MAX_SIZE] = {0};
   log_size = snprintf(log_data, LOG_MAX_SIZE, 
-                "[%d-%02d-%02d %02d:%02d:%02d.%03d][%d][%s:%d] ", 1900 + tm->tm_year, 1 + tm->tm_mon, tm->tm_mday,
-                tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(tv.tv_usec/1000), getpid(), inFile, inLine);
+                "[%d-%02d-%02d %02d:%02d:%02d.%03d][%d][%s:%d][%s] ", 1900 + tm->tm_year, 1 + tm->tm_mon, tm->tm_mday,
+                tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(tv.tv_usec/1000), getpid(), inFile, inLine,
+                bIsDebug ? "debug" : "trace");
   // 确认日志头长度...
   if(log_size == -1) {
     return false;
   }
   // 打开日志文件...
-  int file_log_fd = open(g_absolute_path, O_RDWR|O_CREAT|O_APPEND, 0666);
-  if( file_log_fd < 0 ) {
-    return false;
+  int file_log_fd = -1;
+  if( !bIsDebug ) {
+    file_log_fd = open(g_absolute_path, O_RDWR|O_CREAT|O_APPEND, 0666);
+    if( file_log_fd < 0 ) {
+      return false;
+    }
   }
   // 对数据进行格式化...
   va_list vl_list;
@@ -1412,8 +1434,10 @@ bool do_trace(const char * inFile, int inLine, const char *msg, ...)
   // 加入结尾符号...
   log_data[log_size++] = '\n';
   // 将格式化之后的数据写入文件...
-  write(file_log_fd, log_data, log_size);
-  close(file_log_fd);
+  if( !bIsDebug ) {
+    write(file_log_fd, log_data, log_size);
+    close(file_log_fd);
+  }
   // 将数据打印到控制台...
   fprintf(stderr, log_data);
   return true;
