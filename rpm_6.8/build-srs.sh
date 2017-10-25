@@ -1,7 +1,5 @@
 #!/bin/sh
 
-yum -y install gcc gcc-c++ autoconf automake
-
 #define common param...
 web_path="${PWD}"
 root_path="/root/rpmbuild"
