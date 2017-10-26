@@ -32,9 +32,17 @@ function checkip {
 
 #check input param is valid IP Address...
 myIP=$1
+myWebPort=$2
 checkip $myIP
 if [ $? -gt 0 ]; then
-  echo "'$myIP' is not a valid IP, Please try agin..."
+  echo "param1: '$myIP' is not a valid IP, Please try again..."
+  exit
+fi
+
+#check input param is valid number...
+echo $myWebPort | grep "^[0-9]*$" >/dev/null
+if [[ $? -ne 0 || ! -n "$myWebPort" ]]; then
+  echo "param2: '$myWebPort' is not a number, Please try again..."
   exit
 fi
 
@@ -90,7 +98,7 @@ fi
 
 # curl => save to database...
 myWxapi="/weike/htdocs/wxapi.php"
-myCmd="http://localhost/wxapi.php/Index/config/tracker/$myIP:22122/transmit/$myIP:21001"
+myCmd="http://localhost/wxapi.php/Index/config/tracker/$myIP:22122/transmit/$myIP:21001/webport/$myWebPort"
 if [ -f "$myWxapi" ]; then
   echo "=== [curl] $myCmd ==="
   curl $myCmd
