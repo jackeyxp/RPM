@@ -1463,7 +1463,9 @@ const char * get_command_name(int inCmd)
   {
     case kCmd_Gather_Login:           return "Login";
     case kCmd_PHP_Get_Camera_Status:  return "Get_Camera_Status";
-    case kCmd_PHP_Set_Camera_Name:    return "Set_Camera_Name";
+    case kCmd_PHP_Set_Camera_Add:     return "Set_Camera_Add";
+    case kCmd_PHP_Set_Camera_Mod:     return "Set_Camera_Mod";
+    case kCmd_PHP_Set_Camera_Del:     return "Set_Camera_Del";
     case kCmd_PHP_Set_Course_Add:     return "Set_Course_Add";
     case kCmd_PHP_Set_Course_Mod:     return "Set_Course_Mod";
     case kCmd_PHP_Set_Course_Del:     return "Set_Course_Del";
