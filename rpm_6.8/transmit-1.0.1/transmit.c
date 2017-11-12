@@ -48,7 +48,7 @@ const char * get_client_type(int inType);
 const char * get_command_name(int inCmd);
 int handleTransmitLiveVary(int nDBCameraID, int nUserCount);
 
-// 定义日志处理函数和宏...
+// 定义日志处理函数和宏 => debug 模式只打印不写日志文件...
 bool do_trace(const char * inFile, int inLine, bool bIsDebug, const char *msg, ...);
 #define log_trace(msg, ...) do_trace(__FILE__, __LINE__, false, msg, ##__VA_ARGS__)
 #define log_debug(msg, ...) do_trace(__FILE__, __LINE__, true, msg, ##__VA_ARGS__)
@@ -460,7 +460,8 @@ int CClient::ForRead()
       assert( nResult >= 0 );
     }
     // 打印调试信息到控制台，播放器类型，命令名称，IP地址端口，套接字...
-    log_trace("Client Command(%s - %s, From: %s:%d, Socket: %d)", 
+    // 调试模式 => 只打印，不存盘到日志文件...
+    log_debug("Client Command(%s - %s, From: %s:%d, Socket: %d)", 
               get_client_type(m_nClientType), get_command_name(lpCmdHeader->m_cmd),
               this->m_strSinAddr.c_str(), this->m_nSinPort, this->m_nConnFD);
     // 对数据进行用户类型分发...
@@ -602,6 +603,7 @@ int CClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     assert( lpClient->m_nClientType == kClientGather );
     if( strcasecmp(strMacAddr.c_str(), lpClient->m_strMacGather.c_str()) == 0 ) {
       // 如果是查询采集端状态，直接设置状态返回...
+      // 2017.11.12 - by jackey => PHP不再调用kCmd_PHP_Get_Gather_Status，而是用数据库获取...
       if( lpHeader->m_cmd == kCmd_PHP_Get_Gather_Status ) {
         nErrStatus = kGatherOnLine;
         nErrorCode = ERR_OK;
@@ -646,6 +648,7 @@ int CClient::doResponse(int nCmd, int nErrorCode, int nErrStatus/*= 0*/)
   json_object * new_obj = json_object_new_object();
   json_object_object_add(new_obj, "err_code", json_object_new_int(nErrorCode));
   json_object_object_add(new_obj, "err_cmd", json_object_new_int(nCmd));
+  // 2017.11.12 - by jackey => PHP不再调用kCmd_PHP_Get_Gather_Status，而是用数据库获取...
   // 状态字段按照需要设置，而不是全都要设置...
   if( nCmd == kCmd_PHP_Get_Gather_Status ) {
     json_object_object_add(new_obj, "err_status", json_object_new_int(nErrStatus));
@@ -1479,7 +1482,8 @@ const char * get_command_name(int inCmd)
     case kCmd_Live_Vary:              return "Vary";
     case kCmd_Live_Quit:              return "Quit";
     case kCmd_Play_Login:             return "Login";  
-    case kCmd_Play_Verify:            return "Verify";  
+    case kCmd_Play_Verify:            return "Verify";
+    case kCmd_PHP_Set_Gather_SYS:     return "Set_Gather_SYS";
   }
   return "unknown";
 }
