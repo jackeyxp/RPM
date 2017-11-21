@@ -357,7 +357,7 @@ private:
   int       doResponse(int nCmd, int nErrorCode, int nErrStatus = 0);
   int       doTransmitPlayLogin(int nPlayerSock, int nDBCameraID, char * lpRtmpUrl, int nUserCount);
   int       doTransmitLiveVary(int nDBCameraID, int nUserCount);
-  int       doReturnPlayLogin(char * lpRtmpUrl, char * lpHlsUrl, int nPlayerID);
+  int       doReturnPlayLogin(char * lpFlvUrl, char * lpRtmpUrl, char * lpHlsUrl, int nPlayerID);
   
   CClient     * FindGatherByMAC(const char * lpMacAddr);
   CSrsServer  * FindSrsServer(int nDBCameraID);
@@ -878,11 +878,13 @@ int CClient::parsePlayJson(Cmd_Header * lpHeader, const char * lpJsonPtr)
     int nErrorCode = lpGather->doTransmitPlayLogin(m_nConnFD, nRtmpLive, szRtmpURL, nPlayerCount);
     if( nErrorCode != ERR_OK )
       return nErrorCode;
-    // 转发命令发送成功，直接返回给播放器 rtmp/hls 地址，无需等待采集端的转发结果...
+    // 转发命令发送成功，直接返回给播放器 flvjs/rtmp/hls 地址，无需等待采集端的转发结果...
+    char szFlvURL[256] = {0};
     char szHlsURL[256] = {0};
     string & strHlsAddr = lpServer->m_strHlsAddr;
+    sprintf(szFlvURL, "http://%s/live/live%d.flv", strHlsAddr.c_str(), nRtmpLive);
     sprintf(szHlsURL, "http://%s/live/live%d.m3u8", strHlsAddr.c_str(), nRtmpLive);
-    return this->doReturnPlayLogin(szRtmpURL, szHlsURL, nPlayerID);
+    return this->doReturnPlayLogin(szFlvURL, szRtmpURL, szHlsURL, nPlayerID);
   } else if( lpHeader->m_cmd == kCmd_Play_Verify ) {
     // 处理播放器汇报命令，只有HTML5播放器才会每隔12秒汇报，flash播放器只汇报一次...
     // 必须包含player_id编号数据...
@@ -951,7 +953,7 @@ int CClient::doTransmitPlayLogin(int nPlayerSock, int nDBCameraID, char * lpRtmp
 }
 //
 // 直接反馈直播地址给播放器，无需等待采集端的反馈，避免php阻塞 => 这里是播放器对象...
-int CClient::doReturnPlayLogin(char * lpRtmpUrl, char * lpHlsUrl, int nPlayerID)
+int CClient::doReturnPlayLogin(char * lpFlvUrl, char * lpRtmpUrl, char * lpHlsUrl, int nPlayerID)
 {
   // 这里需要特别注意 => 转发给PHP客服端的数据都需要加上TrackerHeader，便于PHP扩展接收数据...
   TrackerHeader theTracker = {0};
@@ -963,6 +965,8 @@ int CClient::doReturnPlayLogin(char * lpRtmpUrl, char * lpHlsUrl, int nPlayerID)
   json_object_object_add(new_obj, "rtmp_type", json_object_new_string("rtmp/flv"));
   json_object_object_add(new_obj, "hls_url", json_object_new_string(lpHlsUrl));
   json_object_object_add(new_obj, "hls_type", json_object_new_string("application/x-mpegURL"));
+  json_object_object_add(new_obj, "flv_url", json_object_new_string(lpFlvUrl));
+  json_object_object_add(new_obj, "flv_type", json_object_new_string("video/x-flv"));
   // 转换成json字符串，获取字符串长度...
   char * lpNewJson = (char*)json_object_to_json_string(new_obj);
   int nBodyLen = strlen(lpNewJson);
