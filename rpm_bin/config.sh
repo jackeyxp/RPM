@@ -30,9 +30,54 @@ function checkip {
   fi
 }
 
+function checkport {
+  #check must be a number...
+  echo $1 | grep "^[0-9]*$" >/dev/null
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+  # 1 < webPort < 65535
+  if [ $1 -ge 1 -a $1 -le 65535 ] ; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+#check input IP...
+while [ 1 ]
+do
+  read -p "Enter Current Server Web IP: " webIP
+  checkip $webIP
+  # > 0 then not a IP...
+  if [ $? -gt 0 ]; then
+    echo "$webIP is not a valid IP, Please try again..."
+    continue
+  fi
+  # == 0 then IP is OK...
+  echo "$webIP is valid IP...OK."
+  break
+done
+
+#check input Port...
+while [ 1 ]
+do
+  read -p "Enter Current Server Web Port: " webPort
+  checkport $webPort
+  # > 0 then not a Port...
+  if [ $? -gt 0 ]; then
+    echo "$webPort is not a valid Port, Please try again..."
+    continue
+  fi
+  # == 0 then Port is OK...
+  echo "$webPort is valid Port...OK."
+  break
+done
+
 #check input param is valid IP Address...
-myIP=$1
-myWebPort=$2
+myIP=$webIP
+myWebPort=$webPort
+
 checkip $myIP
 if [ $? -gt 0 ]; then
   echo "param1: '$myIP' is not a valid IP, Please try again..."

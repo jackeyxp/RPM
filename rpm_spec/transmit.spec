@@ -22,7 +22,7 @@ g++ transmit.c -o transmit -ljson
 rm -irf %{buildroot}/weike/transmit
 mkdir -p %{buildroot}/weike/transmit
 cp -afp transmit %{buildroot}/weike/transmit/
-cp -afp json-c-0.10-1.x86_64.rpm %{buildroot}/weike/transmit/
+cp -afp libjson.so.0.1.0 %{buildroot}/weike/transmit/
 
 %preun
 
@@ -33,6 +33,10 @@ sed -i '/weike\/transmit/d' /etc/rc.d/rc.local
 /weike/transmit
 
 %post
+echo "---- build soft-link for libjson copy to /usr/lib64 ----"
+ln -sf /weike/transmit/libjson.so.0.1.0 /usr/lib64/libjson.so
+ln -sf /weike/transmit/libjson.so.0.1.0 /usr/lib64/libjson.so.0
+
 #modify /weike/transmit to 755(anyone can excute)...
 chmod -R 755 /weike/transmit
 
