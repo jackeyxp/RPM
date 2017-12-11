@@ -44,39 +44,45 @@ function checkport {
   fi
 }
 
-#check input IP...
-while [ 1 ]
-do
-  read -p "Enter Current Server Web IP: " webIP
-  checkip $webIP
-  # > 0 then not a IP...
-  if [ $? -gt 0 ]; then
-    echo "$webIP is not a valid IP, Please try again..."
-    continue
-  fi
-  # == 0 then IP is OK...
-  echo "$webIP is valid IP...OK."
-  break
-done
+if [ "$1" == "auto" ]; then
+  #auto find local valid IP address...
+  myIP=`ifconfig -a|grep inet|grep -v 127.0.0.1|grep -v inet6|awk '{print $2}'|tr -d "addr:"`
+  myWebPort=80
+  echo "$myIP:$myWebPort is auto detect..."
+else
+  #check input IP...
+  while [ 1 ]
+  do
+    read -p "Enter Current Server Web IP: " webIP
+    checkip $webIP
+    # > 0 then not a IP...
+    if [ $? -gt 0 ]; then
+      echo "$webIP is not a valid IP, Please try again..."
+      continue
+    fi
+    # == 0 then IP is OK...
+    echo "$webIP is valid IP...OK."
+    break
+  done
+  #check input Port...
+  while [ 1 ]
+  do
+    read -p "Enter Current Server Web Port: " webPort
+    checkport $webPort
+    # > 0 then not a Port...
+    if [ $? -gt 0 ]; then
+      echo "$webPort is not a valid Port, Please try again..."
+      continue
+    fi
+    # == 0 then Port is OK...
+    echo "$webPort is valid Port...OK."
+    break
+  done
 
-#check input Port...
-while [ 1 ]
-do
-  read -p "Enter Current Server Web Port: " webPort
-  checkport $webPort
-  # > 0 then not a Port...
-  if [ $? -gt 0 ]; then
-    echo "$webPort is not a valid Port, Please try again..."
-    continue
-  fi
-  # == 0 then Port is OK...
-  echo "$webPort is valid Port...OK."
-  break
-done
-
-#check input param is valid IP Address...
-myIP=$webIP
-myWebPort=$webPort
+  #check input param is valid IP Address...
+  myIP=$webIP
+  myWebPort=$webPort
+fi
 
 checkip $myIP
 if [ $? -gt 0 ]; then
@@ -99,6 +105,8 @@ if [ -f "$mySrs" ]; then
   echo "=== [SRS] restart ==="
   /weike/srs/etc/srs restart
   sleep 2s
+else
+  echo "=== srs not install ==="
 fi
 
 # fdfs-client => /etc/fdfs/client.conf => tracker_server=192.168.1.xx:22122
@@ -110,6 +118,8 @@ if [ -f "$myClient" ]; then
   killall -1 /weike/php/sbin/php-fpm
   /weike/php/sbin/php-fpm
   sleep 2s
+else
+  echo "=== tracker not install ==="
 fi
 
 # fdfs-storage => /etc/fdfs/storage.conf => tracker_server=192.168.1.xx:22122
@@ -127,6 +137,8 @@ if [ -f "$myStorage" ]; then
     echo "=== [fdfs storage] build soft link ==="
     ln -s $myData $myLink
   fi
+else
+  echo "=== storage not install ==="
 fi
 
 # nginx => /etc/fdfs/mod_fastdfs.conf => tracker_server=192.168.1.xx:22122
@@ -139,6 +151,8 @@ if [ -f "$myNginx" ]; then
   sleep 1s
   /weike/nginx/sbin/nginx -p /weike/nginx/
   sleep 1s
+else
+  echo "=== mod_fastdfs not install ==="
 fi
 
 # curl => save to database...
@@ -148,4 +162,6 @@ if [ -f "$myWxapi" ]; then
   echo "=== [curl] $myCmd ==="
   curl $myCmd
   sleep 2s
+else
+  echo "=== web not install ==="
 fi
