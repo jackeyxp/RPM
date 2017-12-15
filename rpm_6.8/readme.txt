@@ -140,6 +140,7 @@ CentOS6.8版本 => 打包核心更新日志
 2017.05.10
 ==========================================
 1. mysql => 修改了源代码 mysql_com.h，默认字符集由'auto'改成'utf8'，这样就能在使用命令行时不会出现问题；
+2. mysql => 后续补充，修改 'auto' 为 'utf8' 的方式，还是会有问题，最终是将 libmysqlclient.so.16.0.0/libmysqlclient_r.so.16.0.0 降低到 5.1.73
 2. mysql => 使用 myisamchk -c -r 修复数据表；
 3. phpMyAdmin => 屏蔽了 function.js 里面有关版本检测的代码；
 4. phpMyAdmin => 修改 config.default.php 将 localhost 改成 127.0.0.1
