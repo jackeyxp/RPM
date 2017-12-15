@@ -1,6 +1,11 @@
 CentOS6.8版本 => 打包核心更新日志
 ==========================================
 
+2017.12.15
+==========================================
+1. php/mysql => 找到了 mysql: unknown variable 'character-set-server=utf8' 的问题所在，是由于 libmysqlclient.so.16.0.0 版本的问题
+2. php/mysql => libmysqlclient.so.16.0.0/libmysqlclient_r.so.16.0.0 降低到 5.1.73 就没有问题了，发现 myhaoyi.com 一直都用的5.1.73版本；
+
 2017.12.14
 ==========================================
 1. mysql => data => monitor => wk_camera 新增 device_show
