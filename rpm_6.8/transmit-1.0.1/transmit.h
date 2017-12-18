@@ -62,6 +62,7 @@ enum {
   kCmd_Play_Login				      = 18,
   kCmd_Play_Verify				    = 19,
   kCmd_PHP_Set_Gather_SYS		  = 20,
+  kCmd_Gather_Camera_List     = 21,
 };
 //
 // define the command header...

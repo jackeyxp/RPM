@@ -31,8 +31,9 @@ using namespace std;
 #define MAX_LISTEN             1024   // 监听队列最大值...
 #define MAX_EPOLL_SIZE         1024   // EPOLL队列最大值...
 #define WAIT_TIME_OUT     10 * 1000   // 全局超时检测10秒...
-#define SRS_TIME_OUT         5 * 60   // SRS服务器超时断开时间5分钟...
-#define PLAY_TIME_OUT            30   // 播放器超时断开时间30秒...
+#define CLIENT_TIME_OUT      1 * 60   // 客户端超时断开时间1分钟(汇报频率30秒)...
+#define SRS_TIME_OUT         4 * 60   // SRS服务器超时断开时间4分钟(汇报频率2分钟)...
+#define PLAY_TIME_OUT            30   // 播放器超时断开时间30秒(汇报频率12秒)...
 #define LOG_MAX_SIZE           2048   // 单条日志最大长度...
 
 void handleTimeout();
@@ -341,6 +342,8 @@ public:
 public:
   int       ForRead();          // 读取网络数据
   int       ForWrite();         // 发送网络数据
+  bool      IsTimeout();        // 检测是否超时
+  void      ResetTimeout();     // 重置超时时间
 private:
   int       parseJsonData(const char * lpJsonPtr, int nJsonLength);          // 统一的JSON解析接口...
   int       doPHPGetCoreData(Cmd_Header * lpHeader);                         // 处理PHP获取核心数据事件...
@@ -366,9 +369,10 @@ public:
   string      m_strSend;          // 数据发送缓存...
   string      m_strRecv;          // 数据读取缓存...
   string      m_strMacGather;     // 记录本采集端的MAC地址...
+  time_t      m_nStartTime;       // 超时检测起点...
 
   GM_MapJson  m_MapJson;          // 终端传递过来的JSON数据...
-  GM_MapLive  m_MapLive;          // 记录本采集端挂接的直播列表...
+  GM_MapLive  m_MapLive;          // 记录本采集端挂接的直播列表(只增不减，曾经加载过，永远存在，记录通道上的在线用户数)...
 };
 
 CClient::CClient(int connfd, int nSinPort, string & strSinAddr)
@@ -378,6 +382,7 @@ CClient::CClient(int connfd, int nSinPort, string & strSinAddr)
   , m_nClientType(kClientPHP)
 {
   assert(m_nConnFD > 0 && m_strSinAddr.size() > 0 );
+  m_nStartTime = time(NULL);
 }
 
 CClient::~CClient()
@@ -428,6 +433,8 @@ int CClient::ForRead()
 		log_trace("Client: %s, read error(%s)", get_client_type(m_nClientType), strerror(errno));
     return -1;
   }
+  // 读取数据有效，重置超时时间...
+  this->ResetTimeout();
 	// 追加读取数据并构造解析头指针...
 	m_strRecv.append(bufRead, nReadLen);
 	// 这里网络数据会发生粘滞现象，因此，需要循环执行...
@@ -1072,6 +1079,50 @@ int CClient::doGatherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     // 保存解析到的有效JSON数据项...
     m_strMacGather = m_MapJson["mac_addr"];
     m_strSinAddr = m_MapJson["ip_addr"];
+  } else if( lpHeader->m_cmd == kCmd_Gather_Camera_List ) {
+    // 处理采集端每隔30秒查询命令 => 查询正在上传的通道列表...
+    // 准备反馈需要的数据缓存区...
+    char szSendBuf[MAX_LINE] = {0};
+    char szValue[50] = {0};
+    // 组合反馈的json数据包...
+    json_object * my_array = NULL;
+    json_object * new_obj = json_object_new_object();
+    json_object_object_add(new_obj, "list_num", json_object_new_int(m_MapLive.size()));
+    // 数组元素大于0，遍历构造数组内容...
+    if( m_MapLive.size() > 0 ) {
+      GM_MapLive::iterator itorLive;
+      my_array = json_object_new_array();
+      for(itorLive = m_MapLive.begin(); itorLive != m_MapLive.end(); ++itorLive) {
+        sprintf(szValue, "%d:%d", itorLive->first, itorLive->second);
+        json_object_array_add(my_array, json_object_new_string(szValue));
+      }
+      // 将数组放入核心对象当中...
+      json_object_object_add(new_obj, "list_data", my_array);
+    }
+    // 转换成json字符串，获取字符串长度...
+    char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+    int nBodyLen = strlen(lpNewJson);
+    // 构造转发结构头信息...
+    Cmd_Header theHeader = {0};
+    theHeader.m_sock = 0;
+    theHeader.m_type = kClientGather;
+    theHeader.m_cmd  = kCmd_Gather_Camera_List;
+    theHeader.m_pkg_len = nBodyLen;
+    memcpy(szSendBuf, &theHeader, sizeof(theHeader));
+    memcpy(szSendBuf+sizeof(theHeader), lpNewJson, nBodyLen);
+    // 将发送数据包缓存起来，等待发送事件到来...
+    m_strSend.assign(szSendBuf, nBodyLen+sizeof(theHeader));
+    // json对象引用计数减少...
+    json_object_put(new_obj);
+    // 向采集端对象回应获取到的在线通道列表...
+    struct epoll_event evClient = {0};
+    evClient.data.fd = m_nConnFD;
+    evClient.events = EPOLLOUT | EPOLLET;
+    // 重新修改事件，加入写入事件...
+    if( epoll_ctl(g_kdpfd, EPOLL_CTL_MOD, m_nConnFD, &evClient) < 0 ) {
+      log_trace("mod socket '%d' to epoll failed: %s", m_nConnFD, strerror(errno));
+      return 0;
+    }
   } else {
     // 2017.06.15 - by jackey => 取消了采集端延时转发给播放器的命令，避免php阻塞...
     // 2017.07.01 - by jackey => php客户端的 kCmd_PHP_Get_Course_Record 命令依然需要中转...
@@ -1109,6 +1160,19 @@ int CClient::doGatherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     }
   }
   return 0;
+}
+//
+// 检测是否超时...
+bool CClient::IsTimeout()
+{
+  time_t nDeltaTime = time(NULL) - m_nStartTime;
+  return ((nDeltaTime >= CLIENT_TIME_OUT) ? true : false);
+}
+//
+// 重置超时时间...
+void CClient::ResetTimeout()
+{
+  m_nStartTime = time(NULL);
 }
 
 char g_absolute_path[256] = {0};
@@ -1301,20 +1365,31 @@ void handleTimeout()
   //log_debug("handleTimeout: Connect(%d), SrsServer(%d)", g_MapConnect.size(), g_MapServer.size());
 
   // 2017.07.26 - by jackey => 根据连接状态删除客户端...
-  // 遍历所有的连接，判断是否有效，无效直接删除...
+  // 2017.12.16 - by jackey => 去掉gettcpstate，使用超时机制...
+  // 遍历所有的连接，判断连接是否超时，超时直接删除...
   CClient * lpClient = NULL;
   GM_MapConn::iterator itorConn;
   itorConn = g_MapConnect.begin();
   while( itorConn != g_MapConnect.end() ) {
     lpClient = itorConn->second;
-    if( !gettcpstate(itorConn->first) ) {
-      log_trace("client type(%s) be killed by handleTimeout()", get_client_type(lpClient->m_nClientType));
+    if( lpClient->IsTimeout() ) {
+      // 发生超时，从epoll队列中删除...
+      int nCurEventFD = lpClient->m_nConnFD;
+      struct epoll_event evDelete = {0};
+      evDelete.data.fd = nCurEventFD;
+      evDelete.events = EPOLLIN | EPOLLET;
+      epoll_ctl(g_kdpfd, EPOLL_CTL_DEL, nCurEventFD, &evDelete);
+      // 打印删除消息，删除对象...
+      log_trace("handleTimeout: %s, Socket(%d) be killed", get_client_type(lpClient->m_nClientType), nCurEventFD);
       delete lpClient; lpClient = NULL;
       g_MapConnect.erase(itorConn++);
+      // 关闭套接字...
+      close(nCurEventFD);
     } else {
       ++itorConn;
     }
   }
+  
   // 遍历所有的直播服务器，判断是否发生了超时...
   GM_MapServer::iterator itorItem;
   CSrsServer * lpServer = NULL;
@@ -1486,6 +1561,7 @@ const char * get_command_name(int inCmd)
     case kCmd_Play_Login:             return "Login";  
     case kCmd_Play_Verify:            return "Verify";
     case kCmd_PHP_Set_Gather_SYS:     return "Set_Gather_SYS";
+    case kCmd_Gather_Camera_List:     return "Camera_List";
   }
   return "unknown";
 }
