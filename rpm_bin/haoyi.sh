@@ -166,7 +166,7 @@ function install_recorder_web()
     return 0
   fi
 
-  down_file="htdocs-0.0.1-1.x86_64.rpm"
+  down_file="recorder-0.0.1-1.x86_64.rpm"
   echo "--------- [OK] get ${down_file} ---------"
   wget $down_limit -c -P $down_path $center_web/download/$down_file
   cd $down_path

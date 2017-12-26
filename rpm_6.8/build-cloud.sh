@@ -168,24 +168,26 @@ function build_monitor_web()
 
 function build_recorder_web()
 {
-  version="htdocs-0.0.1"
-  echo "build recoder web..."
+  version="recorder-0.0.1"
+  echo "build recorder web..."
   #prepare source code...
   tar cfvz ${version}.tar.gz ${version}
   #copy source/spec to rpm directory...
   cp -afp $web_path/${version}.tar.gz $root_path/SOURCES/
   rm -rf $web_path/${version}.tar.gz
   #build the rpm...
-  rpmbuild -ba ../rpm_spec/htdocs.spec
+  rpmbuild -ba ../rpm_spec/recorder.spec
   #cp rpm to rpm_bin
   cp -afp $root_path/RPMS/x86_64/${version}-1.x86_64.rpm ../rpm_bin/
 }
 
 function build_cloud_monitor()
 {
-  echo "build cloud-monitor.tar.gz"
+  config="monitor-0.0.1/wxapi/Conf/config.php"
+  version=$(awk -F"'" '/VERSION/{print $4}' $config)
+  echo "build cloud-monitor-${version}"
   cd ../rpm_bin/
-  tar cfvz cloud-monitor.tar.gz \
+  tar cfvz cloud-monitor-${version}.tar.gz \
     nginx-all-1.10.2-1.x86_64.rpm php-5.6.30-1.x86_64.rpm mysql-5.5.3-1.x86_64.rpm \
     tracker-5.0.9-1.x86_64.rpm storage-5.0.9-1.x86_64.rpm \
     srs-2.0.243-1.x86_64.rpm transmit-1.0.1-1.x86_64.rpm \
@@ -196,14 +198,16 @@ function build_cloud_monitor()
 
 function build_cloud_recorder()
 {
-  echo "build cloud-recorder.tar.gz"
+  config="recorder-0.0.1/wxapi/Conf/config.php"
+  version=$(awk -F"'" '/VERSION/{print $4}' $config)
+  echo "build cloud-recorder-${version}.tar.gz"
   cd ../rpm_bin/
-  tar cfvz cloud-recorder.tar.gz \
+  tar cfvz cloud-recorder-${version}.tar.gz \
     nginx-all-1.10.2-1.x86_64.rpm php-5.6.30-1.x86_64.rpm mysql-5.5.3-1.x86_64.rpm \
     tracker-5.0.9-1.x86_64.rpm storage-5.0.9-1.x86_64.rpm \
     srs-2.0.243-1.x86_64.rpm transmit-1.0.1-1.x86_64.rpm \
     config.sh install_recorder.sh uninstall.sh \
-    htdocs-0.0.1-1.x86_64.rpm
+    recorder-0.0.1-1.x86_64.rpm
   cd $web_path
 }
 

@@ -7,6 +7,6 @@ rpm -ivh tracker-5.0.9-1.x86_64.rpm
 rpm -ivh storage-5.0.9-1.x86_64.rpm
 rpm -ivh srs-2.0.243-1.x86_64.rpm
 rpm -ivh transmit-1.0.1-1.x86_64.rpm
-rpm -ivh htdocs-0.0.1-1.x86_64.rpm
+rpm -ivh recorder-0.0.1-1.x86_64.rpm
 
 sh config.sh auto

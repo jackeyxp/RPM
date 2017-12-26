@@ -1,6 +1,6 @@
 #!/bin/bash
 
-arrList=(php transmit srs mysql-5.5.3 nginx tracker storage htdocs monitor)
+arrList=(php transmit srs mysql-5.5.3 nginx tracker storage recorder monitor)
 
 killall -1 /weike/php/sbin/php-fpm
 sleep 1s
