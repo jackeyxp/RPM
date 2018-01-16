@@ -1,5 +1,7 @@
 #!/bin/bash
 
+yum -y install gd perl-DBI
+
 rpm -ivh nginx-all-1.10.2-1.x86_64.rpm
 rpm -ivh php-5.6.30-1.x86_64.rpm
 rpm -ivh mysql-5.5.3-1.x86_64.rpm
