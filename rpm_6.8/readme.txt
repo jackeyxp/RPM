@@ -1,6 +1,11 @@
 CentOS6.8版本 => 打包核心更新日志
 ==========================================
 
+2018.02.07
+==========================================
+1. mysql => data/haoyi   => wk_record 新增 slice_id/slice_inx/course_id
+2. mysql => data/monitor => wk_record 新增 slice_id/slice_inx/course_id
+
 2018.01.25
 ==========================================
 1. transmit => 新增 kCmd_Gather_Bind_Mini 事件
