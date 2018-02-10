@@ -127,7 +127,8 @@ public:
   int     AddNewPlayer(int nPlayerType = kHTML5);
   void    VerifyPlayer(int nPlayerID, int nPlayerType, bool bIsActive);
   int     GetPlayerCount() { return m_MapPlayer.size(); }
-private:
+  int     GetDBCameraID() { return m_nDBCameraID; }
+public:
   int           m_nMaxPlayerID;   // 该通道下当前最大播放器编号，计数器不断累加 => 通道被删除之后，重新计数，计数从1开始...
   int           m_nDBCameraID;    // 该通道的数据库编号...
   GM_MapPlayer  m_MapPlayer;      // 播放器列表，默认都是HTML5播放器...
@@ -250,6 +251,9 @@ public:
   void       ResetTimeout();
   void       handlePlayerTimeout();
   CCamera *  doMountCamera(int nDBCameraID);
+  string  &  getRtmpAddr() { return m_strRtmpAddr; }
+  string  &  getHlsAddr() { return m_strHlsAddr; }
+  int        getCameraNum() { return m_MapCamera.size(); }
 public:
   time_t        m_nStartTime;       // 超时检测起点...
   string        m_strRtmpAddr;      // 本直播服务器的rtmp地址 => IP:PORT
@@ -535,7 +539,8 @@ int CClient::doPHPGetCoreData(Cmd_Header * lpHeader)
     // 遍历构造数组内容...
     for(itorConn = g_MapConnect.begin(); itorConn != g_MapConnect.end(); ++itorConn) {
       CClient * lpClient = itorConn->second;
-      sprintf(szValue, "%d:%s:%d", lpClient->m_nClientType, lpClient->m_strSinAddr.c_str(), lpClient->m_nSinPort);
+      sprintf(szValue, "%d-%s-%d", lpClient->m_nClientType,
+              lpClient->m_strSinAddr.c_str(), lpClient->m_nSinPort);
       json_object_array_add(my_array, json_object_new_string(szValue));
     }
     // 将数组放入核心对象当中...
@@ -547,11 +552,57 @@ int CClient::doPHPGetCoreData(Cmd_Header * lpHeader)
     my_array = json_object_new_array();
     // 遍历构造数组内容...
     for(itorServer = g_MapServer.begin(); itorServer != g_MapServer.end(); ++itorServer) {
-      string strRtmpAddr = itorServer->first;
-      json_object_array_add(my_array, json_object_new_string(strRtmpAddr.c_str()));
+      CSrsServer * lpServer = itorServer->second;
+      sprintf(szValue, "%s-%s-%d", lpServer->getRtmpAddr().c_str(), 
+              lpServer->getHlsAddr().c_str(), lpServer->getCameraNum());
+      json_object_array_add(my_array, json_object_new_string(szValue));
     }
     // 将数组放入核心对象当中...
     json_object_object_add(new_obj, "err_data", my_array);
+  }
+  // 遍历指定服务器下的通道列表 => 通过指定的参数获取服务器信息...
+  if((lpHeader->m_cmd == kCmd_PHP_Get_Camera_List) && (m_MapJson.find("server") != m_MapJson.end())) {
+    GM_MapServer::iterator itorServer = g_MapServer.find(m_MapJson["server"]);
+    if( itorServer != g_MapServer.end() ) {
+      // 查找到指定的直播服务器对象...
+      GM_MapCamera::iterator itorCamera;
+      CSrsServer * lpServer = itorServer->second;
+      // 如果服务器下面已经挂载了直播通道...
+      if( lpServer->m_MapCamera.size() > 0 ) {
+        my_array = json_object_new_array();
+        for(itorCamera = lpServer->m_MapCamera.begin(); itorCamera != lpServer->m_MapCamera.end(); ++itorCamera) {
+          CCamera * lpCamera = itorCamera->second;
+          sprintf(szValue, "%d-%d", lpCamera->GetDBCameraID(), lpCamera->GetPlayerCount());
+          json_object_array_add(my_array, json_object_new_string(szValue));
+        }
+        json_object_object_add(new_obj, "err_data", my_array);
+      }
+    }
+  }
+  // 遍历指定服务器下指定通道的观看用户列表...
+  if((lpHeader->m_cmd == kCmd_PHP_Get_Player_List) && (m_MapJson.find("server") != m_MapJson.end())) {
+    GM_MapServer::iterator itorServer = g_MapServer.find(m_MapJson["server"]);
+    if((itorServer != g_MapServer.end()) && (m_MapJson.find("camera") != m_MapJson.end())) {
+      // 通过传递的服务器地址和通道编号定位到通道对象...
+      int nDBCameraID = atoi(m_MapJson["camera"].c_str());
+      CSrsServer * lpServer = itorServer->second;
+      GM_MapCamera::iterator itorCamera = lpServer->m_MapCamera.find(nDBCameraID);
+      if( itorCamera != lpServer->m_MapCamera.end() ) {
+        // 找到了有效的通道对象，进一步判断观看用户是否有效...
+        CCamera * lpCamera = itorCamera->second;
+        if( lpCamera->GetPlayerCount() > 0 ) {
+          GM_MapPlayer::iterator itorPlayer;
+          my_array = json_object_new_array();
+          // 观看用户数有效，进一步遍历观看用户列表...
+          for(itorPlayer = lpCamera->m_MapPlayer.begin(); itorPlayer != lpCamera->m_MapPlayer.end(); ++itorPlayer) {
+            CPlayer * lpPlayer = itorPlayer->second;
+            sprintf(szValue, "%d-%d", lpPlayer->GetPlayerID(), lpPlayer->GetPlayerType());
+            json_object_array_add(my_array, json_object_new_string(szValue));
+          }
+          json_object_object_add(new_obj, "err_data", my_array);
+        }
+      }
+    }
   }
   // 转换成json字符串，获取字符串长度...
   char * lpNewJson = (char*)json_object_to_json_string(new_obj);
@@ -581,7 +632,9 @@ int CClient::doPHPGetCoreData(Cmd_Header * lpHeader)
 int CClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
 {
   // 处理特殊的获取中转服务器内部信息的命令...
-  if( lpHeader->m_cmd == kCmd_PHP_Get_All_Client || lpHeader->m_cmd == kCmd_PHP_Get_Live_Server ) {
+  if( lpHeader->m_cmd == kCmd_PHP_Get_All_Client || lpHeader->m_cmd == kCmd_PHP_Get_Live_Server ||
+      lpHeader->m_cmd == kCmd_PHP_Get_Camera_List || lpHeader->m_cmd == kCmd_PHP_Get_Player_List )
+  {
     return this->doPHPGetCoreData(lpHeader);
   }
   // 其它正常的跟采集端有关的命令...
@@ -1561,7 +1614,9 @@ const char * get_command_name(int inCmd)
     case kCmd_Play_Login:             return "Login";  
     case kCmd_Play_Verify:            return "Verify";
     case kCmd_PHP_Set_Gather_SYS:     return "Set_Gather_SYS";
-    case kCmd_Gather_Camera_List:     return "Camera_List";
+    case kCmd_Gather_Camera_List:     return "Gather_Camera_List";
+    case kCmd_PHP_Get_Camera_List:    return "PHP_Camera_List";
+    case kCmd_PHP_Get_Player_List:    return "PHP_Player_List";
   }
   return "unknown";
 }
