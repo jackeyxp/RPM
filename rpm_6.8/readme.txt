@@ -1,6 +1,11 @@
 CentOS6.8版本 => 打包核心更新日志
 ==========================================
 
+2018.02.12
+==========================================
+1. mysql => data/haoyi   => wk_gather 新增 auto_ipc/page_size
+2. mysql => data/monitor => wk_gather 新增 auto_ipc/page_size
+
 2018.02.10
 ==========================================
 1. transmit => 新增 PHP_Get_Camera_List/PHP_Get_Player_List 命令
