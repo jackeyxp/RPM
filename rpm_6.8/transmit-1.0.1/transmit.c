@@ -1615,6 +1615,8 @@ const char * get_command_name(int inCmd)
     case kCmd_Play_Verify:            return "Verify";
     case kCmd_PHP_Set_Gather_SYS:     return "Set_Gather_SYS";
     case kCmd_Gather_Camera_List:     return "Gather_Camera_List";
+    case kCmd_Gather_Bind_Mini:       return "Gather_Bind_Mini";
+    case kCmd_Gather_UnBind_Mini:     return "Gather_UnBind_Mini";
     case kCmd_PHP_Get_Camera_List:    return "PHP_Camera_List";
     case kCmd_PHP_Get_Player_List:    return "PHP_Player_List";
   }

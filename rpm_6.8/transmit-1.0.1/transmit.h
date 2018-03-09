@@ -64,8 +64,9 @@ enum {
   kCmd_PHP_Set_Gather_SYS		  = 20,
   kCmd_Gather_Camera_List     = 21,
   kCmd_Gather_Bind_Mini       = 22,
-  kCmd_PHP_Get_Camera_List    = 23,
-  kCmd_PHP_Get_Player_List    = 24,
+  kCmd_Gather_UnBind_Mini     = 23,
+  kCmd_PHP_Get_Camera_List    = 24,
+  kCmd_PHP_Get_Player_List    = 25,
 };
 //
 // define the command header...

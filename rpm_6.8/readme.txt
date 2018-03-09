@@ -1,6 +1,12 @@
 CentOS6.8版本 => 打包核心更新日志
 ==========================================
 
+2018.03.09
+==========================================
+1. transmit => 新增 Gather_Bind_Mini/Gather_UnBind_Mini 命令
+2. recorder/monitor => 新增 Gather_Bind_Mini/Gather_UnBind_Mini 命令
+3. recorder/monitor => 升级版本到 1.3.1
+
 2018.02.12
 ==========================================
 1. mysql => data/haoyi   => wk_gather 新增 auto_ipc/page_size
