@@ -1,6 +1,12 @@
 CentOS6.8版本 => 打包核心更新日志
 ==========================================
 
+2018.03.29
+==========================================
+1. mysql => data/haoyi/monitor => wk_camera 修复损坏数据表
+2. recorder/monitor => 打开小程序入口
+3. install_monitor.sh/install_recorder.sh => 加入libgomp默认库，PHP会需要
+
 2018.03.09
 ==========================================
 1. transmit => 新增 Gather_Bind_Mini/Gather_UnBind_Mini 命令
