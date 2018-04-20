@@ -1,6 +1,12 @@
 CentOS6.8版本 => 打包核心更新日志
 ==========================================
 
+2018.04.19
+==========================================
+1. mysql => data/haoyi/monitor => wk_system 新增web_trade网站商标字段
+2. mysql => data/haoyi => wk_system 新增6个行业名字自定义字段
+3. mysql => data/haoyi => 新增 wk_title 职称表
+
 2018.04.15
 ==========================================
 1. mysql => data/haoyi/monitor => wk_system 新增 web_save_days => 录像保留天数，默认0永久保留
