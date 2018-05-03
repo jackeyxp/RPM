@@ -1,6 +1,11 @@
 CentOS6.8版本 => 打包核心更新日志
 ==========================================
 
+2018.05.02
+==========================================
+1. mysql => data/haoyi/monitor => 新增 wk_comment 表 和 wk_zan 表；
+2. mysql => data/haoyi/monitor => wk_camera|wk_record新增likes|kicks字段；
+
 2018.04.19
 ==========================================
 1. mysql => data/haoyi/monitor => wk_system 新增web_trade网站商标字段
