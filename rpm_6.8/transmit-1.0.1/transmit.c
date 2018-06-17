@@ -35,6 +35,7 @@ using namespace std;
 #define SRS_TIME_OUT         4 * 60   // SRS服务器超时断开时间4分钟(汇报频率2分钟)...
 #define PLAY_TIME_OUT            30   // 播放器超时断开时间30秒(汇报频率12秒)...
 #define LOG_MAX_SIZE           2048   // 单条日志最大长度...
+#define LIVE_BEGIN_ID        200000   // 直播间开始编号...
 
 void handleTimeout();
 void clearAllServer();
@@ -907,20 +908,25 @@ int CClient::parsePlayJson(Cmd_Header * lpHeader, const char * lpJsonPtr)
     return ERR_NO_COMMAND;
   // 处理播放器登录命令...
   if( lpHeader->m_cmd == kCmd_Play_Login ) {
-    // 必须包含mac_addr，才能找到对应的采集端...
-    if( m_MapJson.find("mac_addr") == m_MapJson.end() || 
-      m_MapJson["mac_addr"].size() <= 0 ) {
-      return ERR_NO_JSON;
+    CClient * lpGather = NULL;
+    CSrsServer * lpServer = NULL;
+    // 如果编号小于200000是摄像头camera => 按需推流...
+    if( nRtmpLive <= LIVE_BEGIN_ID ) {
+      // 必须包含mac_addr，才能找到对应的采集端...
+      if( m_MapJson.find("mac_addr") == m_MapJson.end() || 
+        m_MapJson["mac_addr"].size() <= 0 ) {
+        return ERR_NO_JSON;
+      }
+      // mac_addr  => 采集端MAC地址，用户查询采集端...
+      string & strMacAddr = m_MapJson["mac_addr"];
+      // 首先，根据MAC地址查找采集端，没有采集端...
+      lpGather = this->FindGatherByMAC(strMacAddr.c_str());
+      if( lpGather == NULL )
+        return ERR_NO_GATHER;
+      assert( lpGather != NULL );
     }
-    // mac_addr  => 采集端MAC地址，用户查询采集端...
-    string & strMacAddr = m_MapJson["mac_addr"];
-    // 首先，根据MAC地址查找采集端，没有采集端...
-    CClient * lpGather = this->FindGatherByMAC(strMacAddr.c_str());
-    if( lpGather == NULL )
-      return ERR_NO_GATHER;
-    assert( lpGather != NULL );
     // 通过请求的直播通道编号查找直播服务器...
-    CSrsServer * lpServer = this->FindSrsServer(nRtmpLive);
+    lpServer = this->FindSrsServer(nRtmpLive);
     if( lpServer == NULL )
       return ERR_NO_RTMP;
     // 将当前通道挂载到选定的服务器当中...
@@ -931,11 +937,14 @@ int CClient::parsePlayJson(Cmd_Header * lpHeader, const char * lpJsonPtr)
     // 在通道对象上，创建一个新的播放器对象，并返回这个播放器编号...
     int nPlayerID = lpCamera->AddNewPlayer();
     int nPlayerCount = lpCamera->GetPlayerCount();
-    // 转发播放器登录命令到采集端...
-    assert( this->m_nClientType == kClientPlay );
-    int nErrorCode = lpGather->doTransmitPlayLogin(m_nConnFD, nRtmpLive, szRtmpURL, nPlayerCount);
-    if( nErrorCode != ERR_OK )
-      return nErrorCode;
+    // 如果编号小于200000是摄像头camera => 按需推流...
+    if( nRtmpLive <= LIVE_BEGIN_ID && lpGather != NULL ) {
+      // 转发播放器登录命令到采集端...
+      assert( this->m_nClientType == kClientPlay );
+      int nErrorCode = lpGather->doTransmitPlayLogin(m_nConnFD, nRtmpLive, szRtmpURL, nPlayerCount);
+      if( nErrorCode != ERR_OK )
+        return nErrorCode;
+    }
     // 转发命令发送成功，直接返回给播放器 flvjs/rtmp/hls 地址，无需等待采集端的转发结果...
     char szFlvURL[256] = {0};
     char szHlsURL[256] = {0};
