@@ -39,7 +39,7 @@ void CRoom::doDeleteStudent(CStudent * lpStudent)
     return;
   }
   // 在学生观看端中遍历查找...
-  GM_MapStudent::iterator itorItem;
+  GM_MapStudent::iterator itorItem = m_MapStudentLooker.begin();
   while(itorItem != m_MapStudentLooker.end()) {
     // 找到了相关节点 => 删除节点，返回...
     if(itorItem->second == lpStudent) {

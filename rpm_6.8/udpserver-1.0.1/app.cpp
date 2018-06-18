@@ -81,7 +81,7 @@ CRoom * CApp::doCreateRoom(int inRoomID, int inLiveID)
   CRoom * lpRoom = NULL;
   GM_MapRoom::iterator itorRoom = m_MapRoom.find(inRoomID);
   if( itorRoom != m_MapRoom.end() ) {
-    lpRoom = itorItem->second;
+    lpRoom = itorRoom->second;
     lpRoom->SetLiveID(inLiveID);
     return lpRoom;
   }
@@ -208,7 +208,8 @@ bool CApp::doProcSocket(char * recvBuff, int nRecvCount, sockaddr_in & recvAddr)
   uint16_t nHostSinPort = ntohs(recvAddr.sin_port);
   // 如果是删除指令，需要做特殊处理...
   if( ptTag == PT_TAG_DELETE ) {
-    return this->doTagDelete(nHostSinPort);
+    this->doTagDelete(nHostSinPort);
+    return false;
   }
   // 通过获得的端口，查找CNetwork对象...
   CNetwork * lpNetwork = NULL;
