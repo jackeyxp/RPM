@@ -160,12 +160,20 @@ void CApp::doWaitSocket()
 {
   struct sockaddr_in recvAddr = {0};
   char recvBuff[MAX_BUFF_LEN] = {0};
-  int nAddrLen = sizeof(recvAddr);
-  int nRecvCount = 0;
+  int nAddrLen = 0, nRecvCount = 0;
   while ( m_listen_fd > 0 ) {
     // 从网络层阻塞接收UDP数据报文...
     bzero(recvBuff, MAX_BUFF_LEN);
+    nAddrLen = sizeof(recvAddr);
     nRecvCount = recvfrom(m_listen_fd, recvBuff, MAX_BUFF_LEN, 0, (sockaddr*)&recvAddr, (socklen_t*)&nAddrLen);
+    /////////////////////////////////////////////////////////////////////////////////////
+    // 如果返回长度与输入长度一致 => 说明发送端数据越界 => 超过了系统实际处理长度...
+    // 注意：出现这种情况，一定要排查发送端的问题 => 通常是序号越界造成的...
+    /////////////////////////////////////////////////////////////////////////////////////
+    if( nRecvCount == MAX_BUFF_LEN ) {
+      log_debug("Error Packet Excessed");
+      continue;
+    }
     // 发生错误，打印并退出...
     if( nRecvCount <= 0 ) {
       log_trace("recvfrom error(code:%d, %s)", errno, strerror(errno));
@@ -185,14 +193,14 @@ void CApp::doWaitSocket()
   }
 }
 
-bool CApp::doProcSocket(char * recvBuff, int nRecvCount, sockaddr_in & recvAddr)
+bool CApp::doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr)
 {
   // 通过第一个字节的低2位，判断终端类型...
-  uint8_t tmTag = recvBuff[0] & 0x03;
+  uint8_t tmTag = lpBuffer[0] & 0x03;
   // 获取第一个字节的中2位，得到终端身份...
-  uint8_t idTag = (recvBuff[0] >> 2) & 0x03;
+  uint8_t idTag = (lpBuffer[0] >> 2) & 0x03;
   // 获取第一个字节的高4位，得到数据包类型...
-  uint8_t ptTag = (recvBuff[0] >> 4) & 0x0F;
+  uint8_t ptTag = (lpBuffer[0] >> 4) & 0x0F;
   // 如果终端既不是Student也不是Teacher，错误终端，直接扔掉数据...
   if( tmTag != TM_TAG_STUDENT && tmTag != TM_TAG_TEACHER ) {
     log_debug("Error Terminate Type: %d", tmTag);
@@ -203,9 +211,13 @@ bool CApp::doProcSocket(char * recvBuff, int nRecvCount, sockaddr_in & recvAddr)
     log_debug("Error Identify Type: %d", idTag);
     return false;
   }
+  /////////////////////////////////////////////////////////////////////////////////////////////////////
+  // 打印调试信息...
+  //log_debug("RecvCount: %d, tmTag: %d, idTag: %d, ptTag: %d", nRecvCount, tmTag, idTag, ptTag);
+  /////////////////////////////////////////////////////////////////////////////////////////////////////
   // 获取发送者映射的地址和端口号 => 后期需要注意端口号变化的问题...
-  uint32_t nHostSinAddr = ntohl(recvAddr.sin_addr.s_addr);
-  uint16_t nHostSinPort = ntohs(recvAddr.sin_port);
+  uint32_t nHostSinAddr = ntohl(inAddr.sin_addr.s_addr);
+  uint16_t nHostSinPort = ntohs(inAddr.sin_port);
   // 如果是删除指令，需要做特殊处理...
   if( ptTag == PT_TAG_DELETE ) {
     this->doTagDelete(nHostSinPort);
@@ -217,17 +229,32 @@ bool CApp::doProcSocket(char * recvBuff, int nRecvCount, sockaddr_in & recvAddr)
   itorItem = m_MapNetwork.find(nHostSinPort);
   // 如果没有找到创建一个新的对象...
   if( itorItem == m_MapNetwork.end() ) {
-    // 不能用探测包进行对象创建 => 探测包可能是转发的，身份是相反的...
+    // 如果是探测命令，直接返回 => 探测包太频繁...
     if( ptTag == PT_TAG_DETECT ) {
       log_debug("Detect can't be used to new CNetwork");
       return false;
     }
-    // 只有非探测包可以被用来创建新对象...
+    // 注意：被服务器超时删除之后，才会发生重建...
+    // 如果不是创建命令 => 返回重建命令...
+    if( ptTag != PT_TAG_CREATE ) {
+      rtp_reload_t theReload = {0};
+      theReload.tm = TM_TAG_SERVER;
+      theReload.id = ID_TAG_SERVER;
+      theReload.pt = PT_TAG_RELOAD;
+      // 直接返回重建命令包...
+      sendto(m_listen_fd, &theReload, sizeof(theReload), 0, (sockaddr*)&inAddr, sizeof(inAddr));
+      // 打印重建命令已发出的信息通知...
+      log_debug("Server Reload for tmTag: %d, idTag: %d", tmTag, idTag);
+      return false;
+    }
+    assert( ptTag == PT_TAG_CREATE );
+    // 只有创建命令可以被用来创建新对象...
     switch( tmTag ) {
       case TM_TAG_STUDENT: lpNetwork = new CStudent(tmTag, idTag, nHostSinAddr, nHostSinPort); break;
       case TM_TAG_TEACHER: lpNetwork = new CTeacher(tmTag, idTag, nHostSinAddr, nHostSinPort); break;
     }
   } else {
+    // 注意：这里可能会连续收到 PT_TAG_CREATE 命令，不影响...
     lpNetwork = itorItem->second;
     assert( lpNetwork->GetHostAddr() == nHostSinAddr );
     assert( lpNetwork->GetHostPort() == nHostSinPort );
@@ -241,7 +268,7 @@ bool CApp::doProcSocket(char * recvBuff, int nRecvCount, sockaddr_in & recvAddr)
   // 将网络对象更新到对象集合当中...
   m_MapNetwork[nHostSinPort] = lpNetwork;
   // 将获取的数据包投递到网络对象当中...
-  return lpNetwork->doProcess(ptTag, recvBuff, nRecvCount);
+  return lpNetwork->doProcess(ptTag, lpBuffer, inBufSize);
 }
 
 void CApp::doTagDelete(int nHostPort)

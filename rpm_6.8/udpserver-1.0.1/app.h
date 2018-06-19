@@ -18,7 +18,7 @@ public:
   int         GetListenFD() { return m_listen_fd; }
   CRoom   *   doCreateRoom(int inRoomID, int inLiveID);
 private:
-  bool        doProcSocket(char * recvBuff, int nRecvCount, sockaddr_in & recvAddr);
+  bool        doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr);
   void        doTagDelete(int nHostPort);
   void        doCheckTimeout();
 private:

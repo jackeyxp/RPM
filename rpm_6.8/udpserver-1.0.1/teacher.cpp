@@ -58,7 +58,11 @@ bool CTeacher::doTagDelete(char * lpBuffer, int inBufSize)
 
 bool CTeacher::doTagSupply(char * lpBuffer, int inBufSize)
 {
-  return true;
+  // 只有老师观看者才会发起补包命令...
+  if( this->GetIdTag() != ID_TAG_LOOKER )
+    return false;
+  // 将补包命令转发到学生推流端...
+  return this->doTransferToStudentPusher(lpBuffer, inBufSize);
 }
 
 bool CTeacher::doTagHeader(char * lpBuffer, int inBufSize)
