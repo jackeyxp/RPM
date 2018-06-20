@@ -201,6 +201,12 @@ bool CApp::doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr)
   uint8_t idTag = (lpBuffer[0] >> 2) & 0x03;
   // 获取第一个字节的高4位，得到数据包类型...
   uint8_t ptTag = (lpBuffer[0] >> 4) & 0x0F;
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // 打印调试信息 => 打印所有接收到的数据包内容格式信息...
+  //log_debug("recvfrom, size: %lu, tmTag: %d, idTag: %d, ptTag: %d", inBufSize, tmTag, idTag, ptTag);
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   // 如果终端既不是Student也不是Teacher，错误终端，直接扔掉数据...
   if( tmTag != TM_TAG_STUDENT && tmTag != TM_TAG_TEACHER ) {
     log_debug("Error Terminate Type: %d", tmTag);
@@ -211,10 +217,6 @@ bool CApp::doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr)
     log_debug("Error Identify Type: %d", idTag);
     return false;
   }
-  /////////////////////////////////////////////////////////////////////////////////////////////////////
-  // 打印调试信息...
-  //log_debug("RecvCount: %d, tmTag: %d, idTag: %d, ptTag: %d", nRecvCount, tmTag, idTag, ptTag);
-  /////////////////////////////////////////////////////////////////////////////////////////////////////
   // 获取发送者映射的地址和端口号 => 后期需要注意端口号变化的问题...
   uint32_t nHostSinAddr = ntohl(inAddr.sin_addr.s_addr);
   uint16_t nHostSinPort = ntohs(inAddr.sin_port);
@@ -229,11 +231,7 @@ bool CApp::doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr)
   itorItem = m_MapNetwork.find(nHostSinPort);
   // 如果没有找到创建一个新的对象...
   if( itorItem == m_MapNetwork.end() ) {
-    // 如果是探测命令，直接返回 => 探测包太频繁...
-    if( ptTag == PT_TAG_DETECT ) {
-      log_debug("Detect can't be used to new CNetwork");
-      return false;
-    }
+    // 注意：激发重建操作的通常就是探测命令 => 每秒探测一次...
     // 注意：被服务器超时删除之后，才会发生重建...
     // 如果不是创建命令 => 返回重建命令...
     if( ptTag != PT_TAG_CREATE ) {
@@ -244,7 +242,7 @@ bool CApp::doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr)
       // 直接返回重建命令包...
       sendto(m_listen_fd, &theReload, sizeof(theReload), 0, (sockaddr*)&inAddr, sizeof(inAddr));
       // 打印重建命令已发出的信息通知...
-      log_debug("Server Reload for tmTag: %d, idTag: %d", tmTag, idTag);
+      log_debug("Server Reload for tmTag: %d, idTag: %d, ptTag: %d", tmTag, idTag, ptTag);
       return false;
     }
     assert( ptTag == PT_TAG_CREATE );

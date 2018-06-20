@@ -15,6 +15,7 @@ public:
   uint8_t       GetIdTag() { return m_idTag; }
   uint32_t      GetHostAddr() { return m_nHostAddr; }
   uint16_t      GetHostPort() { return m_nHostPort; }
+  string    &   GetSeqHeader() { return m_strSeqHeader; }
   bool          doProcess(uint8_t ptTag, char * lpBuffer, int inBufSize);
 protected:
   virtual bool  doTagDetect(char * lpBuffer, int inBufSize) = 0;
@@ -33,4 +34,5 @@ protected:
   CRoom    *    m_lpRoom;
   rtp_create_t  m_rtp_create;
   time_t        m_nStartTime;       // 超时检测起点
+  string        m_strSeqHeader;     // 推流端上传的序列头命令包...
 };

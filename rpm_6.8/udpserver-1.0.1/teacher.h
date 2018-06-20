@@ -18,8 +18,10 @@ protected:
   virtual bool  doTagAudio(char * lpBuffer, int inBufSize);
   virtual bool  doTagVideo(char * lpBuffer, int inBufSize);
 private:
+  bool          doCreateForPusher(char * lpBuffer, int inBufSize);
+  bool          doCreateForLooker(char * lpBuffer, int inBufSize);
+  bool          doHeaderForPusher(char * lpBuffer, int inBufSize);
+
   bool          doTransferToStudentPusher(char * lpBuffer, int inBufSize);
   bool          doTransferToStudentLooker(char * lpBuffer, int inBufSize);
-private:
-  string        m_strSeqHeader;
 };

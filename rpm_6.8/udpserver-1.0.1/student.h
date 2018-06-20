@@ -21,6 +21,10 @@ protected:
   virtual bool  doTagAudio(char * lpBuffer, int inBufSize);
   virtual bool  doTagVideo(char * lpBuffer, int inBufSize);
 private:
+  bool          doCreateForPusher(char * lpBuffer, int inBufSize);
+  bool          doCreateForLooker(char * lpBuffer, int inBufSize);
+  bool          doHeaderForPusher(char * lpBuffer, int inBufSize);
+
   bool          doTransferToTeacherLooker(char * lpBuffer, int inBufSize);
   bool          doTransferToTeacherPusher(char * lpBuffer, int inBufSize);
 };
