@@ -50,6 +50,7 @@ typedef struct {
   unsigned char   noset;        // 保留 => 字节对齐
   unsigned short  dtNum;        // 探测序号
   unsigned int    tsSrc;        // 探测发起时的时间戳 => 毫秒
+  unsigned int    maxConSeq;    // 接收端已收到最大连续序列号 => 告诉发送端：这个号码之前的数据包都可以删除了
 }rtp_detect_t;
 //
 // 定义创建命令结构体 => PT_TAG_CREATE
