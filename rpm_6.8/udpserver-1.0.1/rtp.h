@@ -3,10 +3,10 @@
 
 #define DEF_UDP_HOME        "edu.ihaoyi.cn" // 默认UDP服务器地址
 #define DEF_UDP_PORT        5252            // 默认UDP服务器端口
-#define DEF_MTU_SIZE        800             // 默认MTU分片大小
-#define MAX_BUFF_LEN        1024            // 最大报文长度...
-#define LOG_MAX_SIZE        2048            // 单条日志最大长度...
-#define MAX_OPEN_FILE       2048            // 最大打开文件句柄数...
+#define DEF_MTU_SIZE        800             // 默认MTU分片大小(字节)...
+#define MAX_BUFF_LEN        1024            // 最大报文长度(字节)...
+#define LOG_MAX_SIZE        2048            // 单条日志最大长度(字节)...
+#define MAX_OPEN_FILE       2048            // 最大打开文件句柄数(个)...
 #define CHECK_TIME_OUT        10            // 超时检测周期 => 每隔10秒，检测一次超时...
 #define PLAY_TIME_OUT         15            // 网络超时周期 => 15秒没有数据，认为超时...
 
@@ -50,7 +50,8 @@ typedef struct {
   unsigned char   noset;        // 保留 => 字节对齐
   unsigned short  dtNum;        // 探测序号
   unsigned int    tsSrc;        // 探测发起时的时间戳 => 毫秒
-  unsigned int    maxConSeq;    // 接收端已收到最大连续序列号 => 告诉发送端：这个号码之前的数据包都可以删除了
+  unsigned int    maxAConSeq;   // 接收端已收到音频最大连续序列号 => 告诉发送端：这个号码之前的音频数据包都可以删除了
+  unsigned int    maxVConSeq;   // 接收端已收到视频最大连续序列号 => 告诉发送端：这个号码之前的视频数据包都可以删除了
 }rtp_detect_t;
 //
 // 定义创建命令结构体 => PT_TAG_CREATE
@@ -78,7 +79,7 @@ typedef struct {
   unsigned char   tm:2;         // terminate type => TM_TAG_STUDENT | TM_TAG_TEACHER
   unsigned char   id:2;         // identify type => ID_TAG_PUSHER | ID_TAG_LOOKER
   unsigned char   pt:4;         // payload type => PT_TAG_SUPPLY
-  unsigned char   noset;        // 保留 => 字节对齐
+  unsigned char   suType;       // 补包类型 => 8(音频)9(视频)
   unsigned short  suSize;       // 补报长度 / 4 = 补包个数
   // unsigned int => 补包序号1
   // unsigned int => 补包序号2
