@@ -27,12 +27,12 @@ protected:
   virtual bool  doTagAudio(char * lpBuffer, int inBufSize) = 0;
   virtual bool  doTagVideo(char * lpBuffer, int inBufSize) = 0;
 protected:
-  uint32_t      m_nHostAddr;
-  uint16_t      m_nHostPort;
-  uint8_t       m_tmTag;
-  uint8_t       m_idTag;
-  CRoom    *    m_lpRoom;
-  rtp_create_t  m_rtp_create;
+  uint32_t      m_nHostAddr;        // 映射地址
+  uint16_t      m_nHostPort;        // 映射端口
+  uint8_t       m_tmTag;            // 终端类型
+  uint8_t       m_idTag;            // 终端标识
+  CRoom    *    m_lpRoom;           // 房间对象
+  rtp_create_t  m_rtp_create;       // 创建命令
   time_t        m_nStartTime;       // 超时检测起点
   string        m_strSeqHeader;     // 推流端上传的序列头命令包...
 };
