@@ -42,12 +42,19 @@ enum
   PT_TAG_LOSE    = 0x0A,  // 已丢失数据包...
 };
 //
+// 定义探测方向类型...
+enum
+{
+  DT_TO_SERVER   = 0x01,  // 通过服务器中转的探测
+  DT_TO_P2P      = 0x02,  // 通过端到端直接的探测
+};
+//
 // 定义探测命令结构体 => PT_TAG_DETECT
 typedef struct {
   unsigned char   tm:2;         // terminate type => TM_TAG_STUDENT | TM_TAG_TEACHER
   unsigned char   id:2;         // identify type => ID_TAG_PUSHER | ID_TAG_LOOKER
   unsigned char   pt:4;         // payload type => PT_TAG_DETECT
-  unsigned char   noset;        // 保留 => 字节对齐
+  unsigned char   dtDir;        // 探测方向 => DT_TO_SERVER | DT_TO_P2P
   unsigned short  dtNum;        // 探测序号
   unsigned int    tsSrc;        // 探测发起时的时间戳 => 毫秒
   unsigned int    maxAConSeq;   // 接收端已收到音频最大连续序列号 => 告诉发送端：这个号码之前的音频数据包都可以删除了
