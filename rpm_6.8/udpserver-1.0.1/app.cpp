@@ -34,22 +34,112 @@ CApp::~CApp()
   pthread_mutex_destroy(&m_mutex);
 }
 
+void CApp::doAddSupplyList(CTeacher * lpTeacher)
+{
+  // 注意：是从doProcSocket()过来的，已经做了互斥处理...
+  GM_ListTeacher::iterator itorItem;
+  itorItem = std::find(m_ListTeacher.begin(), m_ListTeacher.end(), lpTeacher);
+  // 如果对象已经存在列表当中，直接返回...
+  if( itorItem != m_ListTeacher.end() )
+    return;
+  // 对象没有在列表当中，放到列表尾部...
+  m_ListTeacher.push_back(lpTeacher);
+}
+
+void CApp::doDelSupplyList(CTeacher * lpTeacher)
+{
+  // 注意：是从doProcSocket()过来的，已经做了互斥处理...
+  m_ListTeacher.remove(lpTeacher);
+  /*GM_ListTeacher::iterator itorItem;
+  itorItem = std::find(m_ListTeacher.begin(), m_ListTeacher.end(), lpTeacher);
+  // 如果对象已经存在列表当中，删除之...
+  if( itorItem != m_ListTeacher.end() ) {
+    m_ListTeacher.erase(itorItem);
+  }*/
+}
+
 void CApp::Entry()
 {
   uint64_t next_check_ns = os_gettime_ns();
+  uint64_t next_detect_ns = next_check_ns;
   while( !this->IsStopRequested() ) {
     // 当前时间与上次检测时间之差 => 转换成秒...
     uint64_t cur_time_ns = os_gettime_ns();
-    int nDeltaSecond = (int)((cur_time_ns- next_check_ns)/1000000000);
+    // 每隔 1 秒服务器向所有终端发起探测命令包...
+    if( (cur_time_ns - next_detect_ns)/1000000 >= 1000 ) {
+      this->doServerSendDetect();
+      next_detect_ns = cur_time_ns;
+    }
     // 每隔 10 秒检测一次对象超时 => 检测时间未到，等待半秒再检测...
-    if( nDeltaSecond < CHECK_TIME_OUT ) {
-      os_sleep_ms(500);
+    int nDeltaSecond = (int)((cur_time_ns- next_check_ns)/1000000000);
+    if( nDeltaSecond >= CHECK_TIME_OUT ) {
+      this->doCheckTimeout();
+      next_check_ns = cur_time_ns;
+    }
+    // 进行补包对象的补包检测处理 => 返回休息毫秒数...
+    int n_wait_ms = this->doSendSupply();
+    // 如果休息时间为0 => 不休息，快速进行检测...
+    if( n_wait_ms <= 0 )
+      continue;
+    // 休息时间一定小于100毫秒，大于0毫秒...
+    assert((n_wait_ms > 0) && (n_wait_ms <= 100));
+    os_sleep_ms(n_wait_ms);
+  }
+}
+
+int CApp::doSendSupply()
+{
+  // 线程互斥锁定 => 是否补过包...
+  int n_sleep_ms  = MAX_SLEEP_MS;
+  // 补包发送结果 => -1(删除)0(没发)1(已发)...
+  int nSendResult = 0;
+  pthread_mutex_lock(&m_mutex);  
+  GM_ListTeacher::iterator itorItem = m_ListTeacher.begin();
+  while( itorItem != m_ListTeacher.end() ) {
+    // 执行补包命令，返回执行结果...
+    nSendResult = (*itorItem)->doServerSendSupply();
+    // -1 => 没有补包了，从列表中删除...
+    if( nSendResult < 0 ) {
+      m_ListTeacher.erase(itorItem++);
+      n_sleep_ms = 100;
       continue;
     }
-    // 遍历对象，进行超时检测...
-    this->doCheckTimeout();
-    next_check_ns = cur_time_ns;
+    // 继续检测下一个有补包的老师推流端...
+    ++itorItem;
+    // 0 => 有补包，但是不到补包时间 => 休息15毫秒...
+    if( nSendResult == 0 ) {
+      n_sleep_ms = MAX_SLEEP_MS;
+      continue;
+    }
+    // 1 => 有补包，已经发送补包命令 => 不要休息...
+    if( nSendResult > 0 ) {
+      n_sleep_ms = 0;
+    }
   }
+  // 如果队列已经为空 => 休息100毫秒...
+  if( m_ListTeacher.size() <= 0 ) {
+    n_sleep_ms = 100;
+  }
+  // 线程互斥解锁...
+  pthread_mutex_unlock(&m_mutex);
+  // 返回最终计算的休息毫秒数...
+  return n_sleep_ms;
+}
+//
+// 遍历所有对象，发起探测命令...
+void CApp::doServerSendDetect()
+{
+  // 线程互斥锁定...
+  pthread_mutex_lock(&m_mutex);  
+  CNetwork * lpNetwork = NULL;
+  GM_MapNetwork::iterator itorItem = m_MapNetwork.begin();
+  while( itorItem != m_MapNetwork.end() ) {
+    lpNetwork = itorItem->second;
+    lpNetwork->doServerSendDetect();
+    ++itorItem;
+  }
+  // 线程互斥解锁...
+  pthread_mutex_unlock(&m_mutex);
 }
 //
 // 遍历对象，进行超时检测...
@@ -204,16 +294,16 @@ bool CApp::doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // 打印调试信息 => 打印所有接收到的数据包内容格式信息...
-  //log_debug("recvfrom, size: %lu, tmTag: %d, idTag: %d, ptTag: %d", inBufSize, tmTag, idTag, ptTag);
+  //log_debug("recvfrom, size: %u, tmTag: %d, idTag: %d, ptTag: %d", inBufSize, tmTag, idTag, ptTag);
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  // 如果终端既不是Student也不是Teacher，错误终端，直接扔掉数据...
-  if( tmTag != TM_TAG_STUDENT && tmTag != TM_TAG_TEACHER ) {
+  // 如果终端既不是Student也不是Teacher或Server，错误终端，直接扔掉数据...
+  if( tmTag != TM_TAG_STUDENT && tmTag != TM_TAG_TEACHER && tmTag != TM_TAG_SERVER ) {
     log_debug("Error Terminate Type: %d", tmTag);
     return false;
   }
-  // 如果终端身份既不是Pusher也不是Looker，错误身份，直接扔掉数据...
-  if( idTag != ID_TAG_PUSHER && idTag != ID_TAG_LOOKER ) {
+  // 如果终端身份既不是Pusher也不是Looker或Server，错误身份，直接扔掉数据...
+  if( idTag != ID_TAG_PUSHER && idTag != ID_TAG_LOOKER && idTag != ID_TAG_SERVER ) {
     log_debug("Error Identify Type: %d", idTag);
     return false;
   }

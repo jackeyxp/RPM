@@ -21,6 +21,12 @@ CStudent::~CStudent()
   }
 }
 
+bool CStudent::doServerSendDetect()
+{
+  // 注意：学生端都不进行服务器主动探测...
+  return false;  
+}
+
 bool CStudent::doTagDetect(char * lpBuffer, int inBufSize)
 {
   bool bResult = false;
@@ -86,7 +92,7 @@ bool CStudent::doCreateForPusher(char * lpBuffer, int inBufSize)
     return false;
   }
   // 打印服务器反馈给学生推流端被创建的信息...
-  //log_debug("[Student] doCreateForPusher => %lu:%lu", nHostAddr, nHostPort);
+  //log_debug("[Student] doCreateForPusher => %u:%u", nHostAddr, nHostPort);
   // 没有错误，直接返回...
   return true;
 }
@@ -127,6 +133,7 @@ bool CStudent::doCreateForLooker(char * lpBuffer, int inBufSize)
 
 bool CStudent::doTagDelete(char * lpBuffer, int inBufSize)
 {
+  // 注意：删除命令已经在CApp::doTagDelete()中拦截处理了...
   return true;
 }
 

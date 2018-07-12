@@ -2,7 +2,7 @@
 #include "app.h"
 
 // STL must use g++...
-// g++ -g udpserver.c thread.cpp app.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread
+// g++ -g udpserver.c bmem.c thread.cpp app.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread
 // valgrind --tool=memcheck --leak-check=full --show-reachable=yes ./udpserver
 
 CApp theApp;

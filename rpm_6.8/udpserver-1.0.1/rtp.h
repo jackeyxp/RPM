@@ -9,6 +9,7 @@
 #define MAX_OPEN_FILE       2048            // 最大打开文件句柄数(个)...
 #define CHECK_TIME_OUT        10            // 超时检测周期 => 每隔10秒，检测一次超时...
 #define PLAY_TIME_OUT         15            // 网络超时周期 => 15秒没有数据，认为超时...
+#define MAX_SLEEP_MS          15            // 最大休息时间(毫秒)
 
 //
 // 定义交互终端类型...
@@ -143,3 +144,12 @@ typedef struct {
   unsigned int    seq;          // rtp序列号 => 从1开始
   unsigned int    ts;           // 帧时间戳  => 毫秒
 }rtp_hdr_t;
+//
+// 定义丢包结构体...
+typedef struct {
+  unsigned int    lose_seq;      // 检测到的丢包序列号
+  unsigned int    resend_time;   // 重发时间点 => cur_time + rtt_var => 丢包时的当前时间 + 丢包时的网络抖动时间差
+  unsigned short  resend_count;  // 重发次数值 => 当前丢失包的已重发次数
+  unsigned char   lose_type;     // 丢包类型 => 8(音频)9(视频)
+  unsigned char   noset;         // 保留 => 字节对齐
+}rtp_lose_t;

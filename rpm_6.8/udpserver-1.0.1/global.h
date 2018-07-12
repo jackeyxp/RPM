@@ -16,7 +16,9 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <stdio.h>
+#include <algorithm> 
 #include <string>
+#include <list>
 #include <map>
 
 #include "rtp.h"
@@ -39,10 +41,13 @@ class CApp;
 class CRoom;
 class CNetwork;
 class CStudent;
+class CTeacher;
 
+typedef list<CTeacher *>        GM_ListTeacher; // 有补包的老师推流列表...
 typedef map<int, CRoom *>       GM_MapRoom;     // RoomID => CRoom *
 typedef map<int, CNetwork *>    GM_MapNetwork;  // PortID => CNetwork * => CStudent | CTeacher
 typedef map<int, CStudent *>    GM_MapStudent;  // PortID => CStudent * => 学生端观看者列表
+typedef map<uint32_t, rtp_lose_t>  GM_MapLose;  // 定义检测到的丢包队列 => 序列号 : 丢包结构体...
 
 // 定义日志处理函数和宏 => debug 模式只打印不写日志文件...
 bool do_trace(const char * inFile, int inLine, bool bIsDebug, const char *msg, ...);

@@ -20,6 +20,7 @@ protected:
   virtual bool  doTagReady(char * lpBuffer, int inBufSize);
   virtual bool  doTagAudio(char * lpBuffer, int inBufSize);
   virtual bool  doTagVideo(char * lpBuffer, int inBufSize);
+  virtual bool  doServerSendDetect();
 private:
   bool          doCreateForPusher(char * lpBuffer, int inBufSize);
   bool          doCreateForLooker(char * lpBuffer, int inBufSize);

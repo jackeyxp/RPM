@@ -17,6 +17,8 @@ public:
   uint16_t      GetHostPort() { return m_nHostPort; }
   string    &   GetSeqHeader() { return m_strSeqHeader; }
   bool          doProcess(uint8_t ptTag, char * lpBuffer, int inBufSize);
+public:
+  virtual bool  doServerSendDetect() = 0;
 protected:
   virtual bool  doTagDetect(char * lpBuffer, int inBufSize) = 0;
   virtual bool  doTagCreate(char * lpBuffer, int inBufSize) = 0;
