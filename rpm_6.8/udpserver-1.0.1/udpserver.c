@@ -1,5 +1,6 @@
 
 #include "app.h"
+#include "bmem.h"
 
 // STL must use g++...
 // g++ -g udpserver.c bmem.c thread.cpp app.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread
@@ -142,4 +143,55 @@ bool os_sleepto_ns(uint64_t time_target)
 void os_sleep_ms(uint32_t duration)
 {
 	usleep(duration*1000);
+}
+
+static inline void add_ms_to_ts(struct timespec *ts, unsigned long milliseconds)
+{
+	ts->tv_sec += milliseconds/1000;
+	ts->tv_nsec += (milliseconds%1000)*1000000;
+	if (ts->tv_nsec > 1000000000) {
+		ts->tv_sec += 1;
+		ts->tv_nsec -= 1000000000;
+	}
+}
+
+int os_sem_init(os_sem_t **sem, int value)
+{
+	sem_t new_sem;
+	int ret = sem_init(&new_sem, 0, value);
+	if (ret != 0)
+		return ret;
+
+	*sem = (os_sem_t*)bzalloc(sizeof(struct os_sem_data));
+	(*sem)->sem = new_sem;
+	return 0;
+}
+
+void os_sem_destroy(os_sem_t *sem)
+{
+	if (sem) {
+		sem_destroy(&sem->sem);
+		bfree(sem);
+	}
+}
+
+int os_sem_post(os_sem_t *sem)
+{
+	if (!sem) return -1;
+	return sem_post(&sem->sem);
+}
+
+int os_sem_wait(os_sem_t *sem)
+{
+	if (!sem) return -1;
+	return sem_wait(&sem->sem);
+}
+
+int os_sem_timedwait(os_sem_t *sem, unsigned long milliseconds)
+{
+  if (!sem) return -1;
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  add_ms_to_ts(&ts, milliseconds);
+  return sem_timedwait(&sem->sem, &ts);
 }

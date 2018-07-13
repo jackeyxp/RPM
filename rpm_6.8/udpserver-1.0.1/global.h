@@ -9,6 +9,7 @@
 #include <sys/types.h>      /* basic system data types */
 #include <sys/resource.h>   /* setrlimit */
 #include <sys/time.h>
+#include <semaphore.h>
 #include <fcntl.h>          /* nonblocking */
 #include <stdarg.h>
 #include <assert.h>
@@ -37,6 +38,13 @@ typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
 #endif
 
+#ifndef os_sem_t
+struct os_sem_data {
+	sem_t sem;
+};
+typedef struct os_sem_data os_sem_t;
+#endif
+
 class CApp;
 class CRoom;
 class CNetwork;
@@ -60,3 +68,9 @@ CApp * GetApp();
 uint64_t  os_gettime_ns(void);
 void      os_sleep_ms(uint32_t duration);
 bool      os_sleepto_ns(uint64_t time_target);
+
+int       os_sem_init(os_sem_t **sem, int value);
+void      os_sem_destroy(os_sem_t *sem);
+int       os_sem_post(os_sem_t *sem);
+int       os_sem_wait(os_sem_t *sem);
+int       os_sem_timedwait(os_sem_t *sem, unsigned long milliseconds);

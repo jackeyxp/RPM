@@ -6,9 +6,12 @@
 
 CApp::CApp()
   : m_listen_fd(0)
+  , m_sem_t(NULL)
 {
   // 初始化线程互斥对象...
   pthread_mutex_init(&m_mutex, NULL);
+  // 初始化辅助线程信号量...
+  os_sem_init(&m_sem_t, 0);
 }
 
 CApp::~CApp()
@@ -32,6 +35,8 @@ CApp::~CApp()
   }
   // 删除线程互斥对象...
   pthread_mutex_destroy(&m_mutex);
+  // 释放辅助线程信号量...
+  os_sem_destroy(m_sem_t);
 }
 
 void CApp::doAddSupplyList(CTeacher * lpTeacher)
@@ -44,6 +49,8 @@ void CApp::doAddSupplyList(CTeacher * lpTeacher)
     return;
   // 对象没有在列表当中，放到列表尾部...
   m_ListTeacher.push_back(lpTeacher);
+  // 通知线程信号量状态发生改变...
+  os_sem_post(m_sem_t);
 }
 
 void CApp::doDelSupplyList(CTeacher * lpTeacher)
@@ -60,9 +67,21 @@ void CApp::doDelSupplyList(CTeacher * lpTeacher)
 
 void CApp::Entry()
 {
+  // 设定默认的信号超时时间 => 100 毫秒...
+  unsigned long next_wait_ms = 100;
   uint64_t next_check_ns = os_gettime_ns();
   uint64_t next_detect_ns = next_check_ns;
   while( !this->IsStopRequested() ) {
+    // 无论信号量是超时还是被触发，都要执行下面的操作...
+    log_trace("[App] start, sem-wait: %d", next_wait_ms);
+    if( os_sem_timedwait(m_sem_t, next_wait_ms) == 0 ) {
+      log_trace("[App] receive sem notify, wait: %d", next_wait_ms);
+    }
+    log_trace("[App] end, sem-wait: %d", next_wait_ms);
+    // 进行补包对象的补包检测处理 => 返回休息毫秒数...
+    next_wait_ms = this->doSendSupply();
+    // 等待时间区间 => [0, 100]毫秒...
+    assert(next_wait_ms >= 0 && next_wait_ms <= 100);
     // 当前时间与上次检测时间之差 => 转换成秒...
     uint64_t cur_time_ns = os_gettime_ns();
     // 每隔 1 秒服务器向所有终端发起探测命令包...
@@ -76,14 +95,6 @@ void CApp::Entry()
       this->doCheckTimeout();
       next_check_ns = cur_time_ns;
     }
-    // 进行补包对象的补包检测处理 => 返回休息毫秒数...
-    int n_wait_ms = this->doSendSupply();
-    // 如果休息时间为0 => 不休息，快速进行检测...
-    if( n_wait_ms <= 0 )
-      continue;
-    // 休息时间一定小于100毫秒，大于0毫秒...
-    assert((n_wait_ms > 0) && (n_wait_ms <= 100));
-    os_sleep_ms(n_wait_ms);
   }
 }
 
