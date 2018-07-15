@@ -50,8 +50,8 @@ bool CTeacher::doServerSendDetect()
   // 只有老师推流端，服务器才会主动发起探测命令...
   if( this->GetIdTag() != ID_TAG_PUSHER )
     return false;
-	// 采用了新的拥塞处理 => 删除指定缓存时间点之前的音视频数据包...
-	this->doCalcAVJamStatus();
+  // 采用了新的拥塞处理 => 删除指定缓存时间点之前的音视频数据包...
+  this->doCalcAVJamStatus();
   // 填充探测命令包 => 服务器主动发起...
   m_server_rtp_detect.tm     = TM_TAG_SERVER;
   m_server_rtp_detect.id     = ID_TAG_SERVER;
@@ -59,6 +59,9 @@ bool CTeacher::doServerSendDetect()
   m_server_rtp_detect.tsSrc  = (uint32_t)(os_gettime_ns() / 1000000);
   m_server_rtp_detect.dtDir  = DT_TO_SERVER;
   m_server_rtp_detect.dtNum += 1;
+  // 计算已收到音视频最大连续包号...
+  m_server_rtp_detect.maxAConSeq = this->doCalcMaxConSeq(true);
+  m_server_rtp_detect.maxVConSeq = this->doCalcMaxConSeq(false);
   // 获取需要的相关变量信息...
   uint32_t nHostAddr = this->GetHostAddr();
   uint16_t nHostPort = this->GetHostPort();
@@ -77,6 +80,26 @@ bool CTeacher::doServerSendDetect()
   }
   // 发送成功...
   return true;
+}
+
+uint32_t CTeacher::doCalcMaxConSeq(bool bIsAudio)
+{
+	// 根据数据包类型，找到丢包集合、环形队列、最大播放包...
+	GM_MapLose & theMapLose = bIsAudio ? m_AudioMapLose : m_VideoMapLose;
+	circlebuf  & cur_circle = bIsAudio ? m_audio_circle : m_video_circle;
+	// 发生丢包的计算 => 等于最小丢包号 - 1
+	if( theMapLose.size() > 0 ) {
+		return (theMapLose.begin()->first - 1);
+	}
+	// 没有丢包 => 环形队列为空 => 返回0...
+	if( cur_circle.size <= 0 )
+		return 0;
+	// 没有丢包 => 已收到的最大包号 => 环形队列中最大序列号 - 1...
+	const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
+	static char szPacketBuffer[nPerPackSize] = {0};
+	circlebuf_peek_back(&cur_circle, szPacketBuffer, nPerPackSize);
+	rtp_hdr_t * lpMaxHeader = (rtp_hdr_t*)szPacketBuffer;
+	return (lpMaxHeader->seq - 1);
 }
 
 void CTeacher::doCalcAVJamStatus()
@@ -104,9 +127,9 @@ void CTeacher::doCalcAVJamStatus()
 		// 计算环形队列当中总的缓存时间...
 		uint32_t cur_buf_ms = max_ts - lpCurHeader->ts;
 		// 如果总缓存时间不超过n秒，中断操作...
-		if (cur_buf_ms < 3000)
+		if (cur_buf_ms < 5000)
 			break;
-		assert(cur_buf_ms >= 3000);
+		assert(cur_buf_ms >= 5000);
 		// 保存删除的时间点，供音频参考...
 		min_ts = lpCurHeader->ts;
 		min_seq = lpCurHeader->seq;

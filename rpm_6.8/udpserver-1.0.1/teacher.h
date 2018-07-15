@@ -26,6 +26,7 @@ protected:
   virtual bool  doTagVideo(char * lpBuffer, int inBufSize);
   virtual bool  doServerSendDetect();
 private:
+  uint32_t      doCalcMaxConSeq(bool bIsAudio);
   int           doSendSupplyCmd(bool bIsAudio);
   bool          doCreateForPusher(char * lpBuffer, int inBufSize);
   bool          doCreateForLooker(char * lpBuffer, int inBufSize);
