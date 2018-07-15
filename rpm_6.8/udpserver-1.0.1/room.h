@@ -16,6 +16,7 @@ public:
   CTeacher  *  GetTeacherPusher() { return m_lpTeacherPusher; }
   CStudent  *  GetStudentPusher() { return m_lpStudentPusher; }
 public:
+  void         doDumpRoomInfo();
   void         doCreateStudent(CStudent * lpStudent);
   void         doDeleteStudent(CStudent * lpStudent);
   void         doCreateTeacher(CTeacher * lpTeacher);

@@ -17,6 +17,12 @@ CRoom::~CRoom()
 {
   
 }
+
+void CRoom::doDumpRoomInfo()
+{
+  log_trace("\n======== RoomID: %d, LiveID: %d ========\n Student-Pusher: %d, Teacher-Looker: %d\n Teacher-Pusher: %d, Student-Looker: %d", m_nRoomID, m_nLiveID,
+            ((m_lpStudentPusher != NULL) ? 1 : 0), ((m_lpTeacherLooker != NULL) ? 1 : 0), ((m_lpTeacherPusher != NULL) ? 1 : 0), m_MapStudentLooker.size());
+}
 //
 // 根据传递过来的学生端类型，进行变量更新...
 void CRoom::doCreateStudent(CStudent * lpStudent)
@@ -33,13 +39,24 @@ void CRoom::doCreateStudent(CStudent * lpStudent)
 // 处理学生端删除事件...
 void CRoom::doDeleteStudent(CStudent * lpStudent)
 {
+  // 如果输入的学生端对象无效，直接返回...
+  if( lpStudent == NULL )
+    return;
   // 进行指针比较，如果是学生推流端，置空，返回...
   if( lpStudent == m_lpStudentPusher ) {
     m_lpStudentPusher = NULL;
     return;
   }
   // 在学生观看端中遍历查找...
-  GM_MapStudent::iterator itorItem = m_MapStudentLooker.begin();
+  int nHostPort = lpStudent->GetHostPort();
+  GM_MapStudent::iterator itorItem = m_MapStudentLooker.find(nHostPort);
+  // 找到相关观看学生端对象，直接删除返回...
+  if( itorItem != m_MapStudentLooker.end() ) {
+    m_MapStudentLooker.erase(itorItem);
+    return;
+  }
+  // 如果通过端口方式没有找到，通过指针遍历查找...
+  itorItem = m_MapStudentLooker.begin();
   while(itorItem != m_MapStudentLooker.end()) {
     // 找到了相关节点 => 删除节点，返回...
     if(itorItem->second == lpStudent) {
@@ -47,6 +64,8 @@ void CRoom::doDeleteStudent(CStudent * lpStudent)
       return;
     }
   }
+  // 通过指针遍历也没有找到，打印错误信息...
+  log_trace("Can't find Student-Looker, HostPort: %d", nHostPort);
 }
 //
 // 根据传递过来的老师端类型，进行变量更新...
@@ -85,7 +104,7 @@ bool CRoom::doTransferToStudentLooker(char * lpBuffer, int inBufSize)
   for(itorItem = m_MapStudentLooker.begin(); itorItem != m_MapStudentLooker.end(); ++itorItem) {
     CStudent * lpStudent = itorItem->second;
     if( lpStudent == NULL ) continue;
-    lpStudent->doTransferByRoom(lpBuffer, inBufSize);
+    lpStudent->doTransferToStudentLooker(lpBuffer, inBufSize);
   }
   return true;
 }

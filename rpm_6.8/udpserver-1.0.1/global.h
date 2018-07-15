@@ -51,7 +51,8 @@ class CNetwork;
 class CStudent;
 class CTeacher;
 
-typedef list<CTeacher *>        GM_ListTeacher; // 有补包的老师推流列表...
+typedef list<CTeacher *>        GM_ListTeacher; // 有补包的老师推流者列表...
+typedef list<CStudent *>        GM_ListStudent; // 有丢包的学生观看者列表...
 typedef map<int, CRoom *>       GM_MapRoom;     // RoomID => CRoom *
 typedef map<int, CNetwork *>    GM_MapNetwork;  // PortID => CNetwork * => CStudent | CTeacher
 typedef map<int, CStudent *>    GM_MapStudent;  // PortID => CStudent * => 学生端观看者列表

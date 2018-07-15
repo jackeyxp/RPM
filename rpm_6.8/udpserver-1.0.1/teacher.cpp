@@ -37,7 +37,11 @@ CTeacher::~CTeacher()
 	circlebuf_free(&m_video_circle);
   // 如果是推流端，把自己从补包队列当中删除掉...
   if( this->GetIdTag() == ID_TAG_PUSHER ) {
-    GetApp()->doDelSupplyList(this);
+    GetApp()->doDelSupplyForTeacher(this);
+  }
+  // 打印老师端所在的房间信息...
+  if( m_lpRoom != NULL ) {
+    m_lpRoom->doDumpRoomInfo();
   }
 }
 
@@ -148,6 +152,22 @@ void CTeacher::doEarseAudioByPTS(uint32_t inTimeStamp)
 	}
 	// 打印音频拥塞信息 => 当前位置，已发送数据包 => 两者之差就是观看端的有效补包空间...
 	log_trace("[Teacher-Pusher] Audio Jam => MinSeq: %u, MaxSeq: %u, Circle: %d", min_seq, max_seq, cur_circle.size/nPerPackSize);
+}
+//
+// 返回最小序号包，不用管是否是有效包号...
+uint32_t CTeacher::doCalcMinSeq(bool bIsAudio)
+{
+	// 音视频使用不同队列和变量...
+	circlebuf & cur_circle = bIsAudio ? m_audio_circle : m_video_circle;
+  // 如果环形队列为空，直接返回0...
+  if( cur_circle.size <= 0 )
+    return 0;
+  // 读取第一个数据包的内容，获取最小包序号...
+	const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
+	static char szPacketBuffer[nPerPackSize] = { 0 };
+  circlebuf_peek_front(&cur_circle, szPacketBuffer, nPerPackSize);
+  rtp_hdr_t * lpCurHeader = (rtp_hdr_t*)szPacketBuffer;
+  return lpCurHeader->seq;
 }
 
 bool CTeacher::doTagDetect(char * lpBuffer, int inBufSize)
@@ -529,7 +549,7 @@ void CTeacher::doFillLosePack(uint8_t inPType, uint32_t nStartLoseID, uint32_t n
 		++sup_id;
 	}
   // 把自己加入到补包对象列表当中...
-  GetApp()->doAddSupplyList(this);
+  GetApp()->doAddSupplyForTeacher(this);
 }
 
 int CTeacher::doServerSendSupply()

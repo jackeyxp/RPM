@@ -14,8 +14,10 @@ public:
   bool        doInitRLimit();
   void        doWaitSocket();
   int         doCreateSocket(int nPort);
-  void        doAddSupplyList(CTeacher * lpTeacher);
-  void        doDelSupplyList(CTeacher * lpTeacher);
+  void        doAddLoseForStudent(CStudent * lpStudent);
+  void        doDelLoseForStudent(CStudent * lpStudent);
+  void        doAddSupplyForTeacher(CTeacher * lpTeacher);
+  void        doDelSupplyForTeacher(CTeacher * lpTeacher);
 public:
   int         GetListenFD() { return m_listen_fd; }
   CRoom   *   doCreateRoom(int inRoomID, int inLiveID);
@@ -25,11 +27,13 @@ private:
   void        doServerSendDetect();
   void        doCheckTimeout();
   int         doSendSupply();
+  int         doSendLose();
 private:
   int               m_listen_fd;      // UDP监听套接字...
   GM_MapRoom        m_MapRoom;        // 房间列表...
   GM_MapNetwork     m_MapNetwork;     // 网络对象列表...
-  GM_ListTeacher    m_ListTeacher;    // 有补包的老师推流列表...
+  GM_ListTeacher    m_ListTeacher;    // 有补包的老师推流者列表...
+  GM_ListStudent    m_ListStudent;    // 有丢包的学生观看者列表...
   pthread_mutex_t   m_mutex;          // 线程互斥对象...
   os_sem_t     *    m_sem_t;          // 辅助线程信号量...
 };

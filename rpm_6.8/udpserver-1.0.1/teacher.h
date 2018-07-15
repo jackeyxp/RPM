@@ -11,6 +11,9 @@ public:
   virtual ~CTeacher();
 public:
   int           doServerSendSupply();
+  uint32_t      doCalcMinSeq(bool bIsAudio);
+  circlebuf  &  GetAudioCircle() { return m_audio_circle; }
+  circlebuf  &  GetVideoCircle() { return m_video_circle; }
 protected:
   virtual bool  doTagDetect(char * lpBuffer, int inBufSize);
   virtual bool  doTagCreate(char * lpBuffer, int inBufSize);

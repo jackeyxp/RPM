@@ -39,7 +39,7 @@ CApp::~CApp()
   os_sem_destroy(m_sem_t);
 }
 
-void CApp::doAddSupplyList(CTeacher * lpTeacher)
+void CApp::doAddSupplyForTeacher(CTeacher * lpTeacher)
 {
   // 注意：是从doProcSocket()过来的，已经做了互斥处理...
   GM_ListTeacher::iterator itorItem;
@@ -53,35 +53,52 @@ void CApp::doAddSupplyList(CTeacher * lpTeacher)
   os_sem_post(m_sem_t);
 }
 
-void CApp::doDelSupplyList(CTeacher * lpTeacher)
+void CApp::doDelSupplyForTeacher(CTeacher * lpTeacher)
 {
   // 注意：是从doProcSocket()过来的，已经做了互斥处理...
   m_ListTeacher.remove(lpTeacher);
-  /*GM_ListTeacher::iterator itorItem;
-  itorItem = std::find(m_ListTeacher.begin(), m_ListTeacher.end(), lpTeacher);
-  // 如果对象已经存在列表当中，删除之...
-  if( itorItem != m_ListTeacher.end() ) {
-    m_ListTeacher.erase(itorItem);
-  }*/
+}
+
+void CApp::doAddLoseForStudent(CStudent * lpStudent)
+{
+  // 注意：是从doProcSocket()过来的，已经做了互斥处理...
+  GM_ListStudent::iterator itorItem;
+  itorItem = std::find(m_ListStudent.begin(), m_ListStudent.end(), lpStudent);
+  // 如果对象已经存在列表当中，直接返回...
+  if( itorItem != m_ListStudent.end() )
+    return;
+  // 对象没有在列表当中，放到列表尾部...
+  m_ListStudent.push_back(lpStudent);
+  // 通知线程信号量状态发生改变...
+  os_sem_post(m_sem_t);
+}
+
+void CApp::doDelLoseForStudent(CStudent * lpStudent)
+{
+  // 注意：是从doProcSocket()过来的，已经做了互斥处理...
+  m_ListStudent.remove(lpStudent);
 }
 
 void CApp::Entry()
 {
-  // 设定默认的信号超时时间 => 100 毫秒...
-  unsigned long next_wait_ms = 100;
+  // 设定默认的信号超时时间 => APP_SLEEP_MS 毫秒...
+  unsigned long next_wait_ms = APP_SLEEP_MS;
   uint64_t next_check_ns = os_gettime_ns();
   uint64_t next_detect_ns = next_check_ns;
   while( !this->IsStopRequested() ) {
+    // 注意：这里用信号量代替sleep的目的是为了避免补包发生时的命令延时...
     // 无论信号量是超时还是被触发，都要执行下面的操作...
-    log_trace("[App] start, sem-wait: %d", next_wait_ms);
-    if( os_sem_timedwait(m_sem_t, next_wait_ms) == 0 ) {
-      log_trace("[App] receive sem notify, wait: %d", next_wait_ms);
-    }
-    log_trace("[App] end, sem-wait: %d", next_wait_ms);
+    //log_trace("[App] start, sem-wait: %d", next_wait_ms);
+    os_sem_timedwait(m_sem_t, next_wait_ms);
+    //log_trace("[App] end, sem-wait: %d", next_wait_ms);
     // 进行补包对象的补包检测处理 => 返回休息毫秒数...
-    next_wait_ms = this->doSendSupply();
-    // 等待时间区间 => [0, 100]毫秒...
-    assert(next_wait_ms >= 0 && next_wait_ms <= 100);
+    int nRetSupply = this->doSendSupply();
+    // 进行学生观看端的丢包处理过程...
+    int nRetLose = this->doSendLose();
+    // 取两者当中最小的时间做为等待时间...
+    next_wait_ms = min(nRetSupply, nRetLose);
+    // 等待时间区间 => [0, APP_SLEEP_MS]毫秒...
+    assert(next_wait_ms >= 0 && next_wait_ms <= APP_SLEEP_MS);
     // 当前时间与上次检测时间之差 => 转换成秒...
     uint64_t cur_time_ns = os_gettime_ns();
     // 每隔 1 秒服务器向所有终端发起探测命令包...
@@ -98,38 +115,66 @@ void CApp::Entry()
   }
 }
 
+int CApp::doSendLose()
+{
+  // 线程互斥锁定 => 是否补过包...
+  int n_sleep_ms  = APP_SLEEP_MS;
+  pthread_mutex_lock(&m_mutex);
+  GM_ListStudent::iterator itorItem = m_ListStudent.begin();
+  while( itorItem != m_ListStudent.end() ) {
+    // 执行发送丢包数据内容，返回是否还要执行丢包...
+    bool bSendResult = (*itorItem)->doServerSendLose();
+    // true => 还有丢包要发送，不能休息...
+    if( bSendResult ) {
+      ++itorItem;
+      n_sleep_ms = min(n_sleep_ms, 0);
+    } else {
+      // false => 没有丢包要发了，从队列当中删除...
+      m_ListStudent.erase(itorItem++);
+      n_sleep_ms = min(n_sleep_ms, APP_SLEEP_MS);
+    }
+  }  
+  // 如果队列已经为空 => 休息100毫秒...
+  if( m_ListStudent.size() <= 0 ) {
+    n_sleep_ms = APP_SLEEP_MS;
+  }
+  // 线程互斥解锁...
+  pthread_mutex_unlock(&m_mutex);
+  // 返回最终计算的休息毫秒数...
+  return n_sleep_ms;
+}
+
 int CApp::doSendSupply()
 {
   // 线程互斥锁定 => 是否补过包...
-  int n_sleep_ms  = MAX_SLEEP_MS;
+  int n_sleep_ms  = APP_SLEEP_MS;
   // 补包发送结果 => -1(删除)0(没发)1(已发)...
-  int nSendResult = 0;
   pthread_mutex_lock(&m_mutex);  
   GM_ListTeacher::iterator itorItem = m_ListTeacher.begin();
   while( itorItem != m_ListTeacher.end() ) {
     // 执行补包命令，返回执行结果...
-    nSendResult = (*itorItem)->doServerSendSupply();
+    int nSendResult = (*itorItem)->doServerSendSupply();
     // -1 => 没有补包了，从列表中删除...
     if( nSendResult < 0 ) {
       m_ListTeacher.erase(itorItem++);
-      n_sleep_ms = 100;
+      n_sleep_ms = min(n_sleep_ms, APP_SLEEP_MS);
       continue;
     }
     // 继续检测下一个有补包的老师推流端...
     ++itorItem;
     // 0 => 有补包，但是不到补包时间 => 休息15毫秒...
     if( nSendResult == 0 ) {
-      n_sleep_ms = MAX_SLEEP_MS;
+      n_sleep_ms = min(n_sleep_ms, MAX_SLEEP_MS);
       continue;
     }
     // 1 => 有补包，已经发送补包命令 => 不要休息...
     if( nSendResult > 0 ) {
-      n_sleep_ms = 0;
+      n_sleep_ms = min(n_sleep_ms, 0);
     }
   }
   // 如果队列已经为空 => 休息100毫秒...
   if( m_ListTeacher.size() <= 0 ) {
-    n_sleep_ms = 100;
+    n_sleep_ms = APP_SLEEP_MS;
   }
   // 线程互斥解锁...
   pthread_mutex_unlock(&m_mutex);
