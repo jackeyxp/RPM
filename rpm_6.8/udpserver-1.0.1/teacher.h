@@ -14,6 +14,7 @@ public:
   uint32_t      doCalcMinSeq(bool bIsAudio);
   circlebuf  &  GetAudioCircle() { return m_audio_circle; }
   circlebuf  &  GetVideoCircle() { return m_video_circle; }
+  bool          doIsServerLose(bool bIsAudio, uint32_t inLoseSeq);
 protected:
   virtual bool  doTagDetect(char * lpBuffer, int inBufSize);
   virtual bool  doTagCreate(char * lpBuffer, int inBufSize);

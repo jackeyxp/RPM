@@ -24,6 +24,7 @@ protected:
   virtual bool  doServerSendDetect();
 private:
   void          doSendLosePacket(bool bIsAudio);
+  bool          doIsServerLose(bool bIsAudio, uint32_t inLoseSeq);
   bool          doDetectForLooker(char * lpBuffer, int inBufSize);
   bool          doCreateForPusher(char * lpBuffer, int inBufSize);
   bool          doCreateForLooker(char * lpBuffer, int inBufSize);

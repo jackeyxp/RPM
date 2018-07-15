@@ -174,46 +174,68 @@ bool CStudent::doTagSupply(char * lpBuffer, int inBufSize)
   uint8_t idTag = (lpBuffer[0] >> 2) & 0x03;
   // 获取第一个字节的高4位，得到数据包类型...
   uint8_t ptTag = (lpBuffer[0] >> 4) & 0x0F;
-	// 注意：只处理 学生观看端 发出的补包命令...
-	if( tmTag != TM_TAG_STUDENT || idTag != ID_TAG_LOOKER )
-		return false;
+  // 注意：只处理 学生观看端 发出的补包命令...
+  if( tmTag != TM_TAG_STUDENT || idTag != ID_TAG_LOOKER )
+    return false;
   // 注意：学生观看端的补包从服务器上的老师推流者的缓存获取...
-	rtp_supply_t rtpSupply = {0};
-	int nHeadSize = sizeof(rtp_supply_t);
-	memcpy(&rtpSupply, lpBuffer, nHeadSize);
-	if( (rtpSupply.suSize <= 0) || ((nHeadSize + rtpSupply.suSize) != inBufSize) )
-		return false;
-	// 根据数据包类型，找到丢包集合...
-	GM_MapLose & theMapLose = (rtpSupply.suType == PT_TAG_AUDIO) ? m_AudioMapLose : m_VideoMapLose;
-	// 获取需要补包的序列号，加入到补包队列当中...
-	char * lpDataPtr = lpBuffer + nHeadSize;
-	int    nDataSize = rtpSupply.suSize;
-	while( nDataSize > 0 ) {
-		uint32_t   nLoseSeq = 0;
-		rtp_lose_t rtpLose = {0};
-		// 获取补包序列号...
-		memcpy(&nLoseSeq, lpDataPtr, sizeof(int));
-		// 如果序列号已经存在，增加补包次数，不存在，增加新记录...
-		if( theMapLose.find(nLoseSeq) != theMapLose.end() ) {
-			rtp_lose_t & theFind = theMapLose[nLoseSeq];
-			theFind.lose_type = rtpSupply.suType;
-			theFind.lose_seq = nLoseSeq;
-			++theFind.resend_count;
-		} else {
-			rtpLose.lose_seq = nLoseSeq;
-			rtpLose.lose_type = rtpSupply.suType;
-			rtpLose.resend_time = (uint32_t)(os_gettime_ns() / 1000000);
-			theMapLose[rtpLose.lose_seq] = rtpLose;
-		}
-		// 移动数据区指针位置...
-		lpDataPtr += sizeof(int);
-		nDataSize -= sizeof(int);
-	}
+  rtp_supply_t rtpSupply = {0};
+  int nHeadSize = sizeof(rtp_supply_t);
+  memcpy(&rtpSupply, lpBuffer, nHeadSize);
+  if( (rtpSupply.suSize <= 0) || ((nHeadSize + rtpSupply.suSize) != inBufSize) )
+    return false;
+  // 根据数据包类型，找到丢包集合...
+  bool bIsAudio = (rtpSupply.suType == PT_TAG_AUDIO) ? true : false;
+  GM_MapLose & theMapLose = bIsAudio ? m_AudioMapLose : m_VideoMapLose;
+  // 获取需要补包的序列号，加入到补包队列当中...
+  char * lpDataPtr = lpBuffer + nHeadSize;
+  int    nDataSize = rtpSupply.suSize;
+  while( nDataSize > 0 ) {
+    uint32_t   nLoseSeq = 0;
+    rtp_lose_t rtpLose = {0};
+    // 获取补包序列号...
+    memcpy(&nLoseSeq, lpDataPtr, sizeof(int));
+    // 移动数据区指针位置...
+    lpDataPtr += sizeof(int);
+    nDataSize -= sizeof(int);
+    // 查看这个丢包号是否是服务器端也要补的包...
+    // 服务器收到补包后会自动转发，这里就不用补了...
+    if( this->doIsServerLose(bIsAudio, nLoseSeq) )
+      continue;
+    // 是观看端丢失的新包，需要进行补包队列处理...
+    // 如果序列号已经存在，增加补包次数，不存在，增加新记录...
+    if( theMapLose.find(nLoseSeq) != theMapLose.end() ) {
+      rtp_lose_t & theFind = theMapLose[nLoseSeq];
+      theFind.lose_type = rtpSupply.suType;
+      theFind.lose_seq = nLoseSeq;
+      ++theFind.resend_count;
+    } else {
+      rtpLose.lose_seq = nLoseSeq;
+      rtpLose.lose_type = rtpSupply.suType;
+      rtpLose.resend_time = (uint32_t)(os_gettime_ns() / 1000000);
+      theMapLose[rtpLose.lose_seq] = rtpLose;
+    }
+  }
+  // 如果补包队列为空 => 都是服务器端本身就需要补的包...
+  if( theMapLose.size() <= 0 )
+    return true;
   // 把自己加入到丢包对象列表当中...
   GetApp()->doAddLoseForStudent(this);
   // 打印已收到补包命令...
   log_trace("[Student-Looker] Supply Recv => Count: %d, Type: %d", rtpSupply.suSize / sizeof(int), rtpSupply.suType);
   return true;
+}
+
+bool CStudent::doIsServerLose(bool bIsAudio, uint32_t inLoseSeq)
+{
+  // 如果没有房间，直接返回...
+  if( m_lpRoom == NULL )
+    return false;
+  // 获取房间里的老师推流者对象 => 无推流者，直接返回...
+  CTeacher * lpTeacher = m_lpRoom->GetTeacherPusher();
+  if( lpTeacher == NULL )
+    return false;
+  // 在老师推流端中查看是否在对应的补包队列当中...
+  return lpTeacher->doIsServerLose(bIsAudio, inLoseSeq);
 }
 
 bool CStudent::doServerSendLose()
@@ -287,9 +309,9 @@ void CStudent::doSendLosePacket(bool bIsAudio)
   memset(szPacketBuffer, 0, nPerPackSize);
   circlebuf_read(&cur_circle, nSendPos, szPacketBuffer, nPerPackSize);
   lpSendHeader = (rtp_hdr_t*)szPacketBuffer;
-  // 如果找到的序号位置不对，直接返回...
-  if( lpSendHeader->seq != rtpLose.lose_seq ) {
-    log_trace("[Student-Looker] Supply Error => Seq: %u, Find: %u, Type: %d", rtpLose.lose_seq, lpSendHeader->seq, rtpLose.lose_type);
+  // 如果找到的序号位置不对 或 本身就是需要补的丢包...
+  if((lpSendHeader->pt == PT_TAG_LOSE) || (lpSendHeader->seq != rtpLose.lose_seq)) {
+    log_trace("[Student-Looker] Supply Error => Seq: %u, Find: %u, Type: %d", rtpLose.lose_seq, lpSendHeader->seq, lpSendHeader->pt);
     return;
   }
   // 获取有效的数据区长度 => 包头 + 数据...

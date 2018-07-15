@@ -117,7 +117,7 @@ void CTeacher::doCalcAVJamStatus()
 	if (min_ts <= 0 || min_seq <= 0 )
 		return;
 	// 打印网络拥塞情况 => 就是视频缓存的拥塞情况...
-	log_trace("[Teacher-Pusher] Video Jam => MinSeq: %u, MaxSeq: %u, Circle: %d", min_seq, max_seq, cur_circle.size/nPerPackSize);
+	//log_trace("[Teacher-Pusher] Video Jam => MinSeq: %u, MaxSeq: %u, Circle: %d", min_seq, max_seq, cur_circle.size/nPerPackSize);
 	// 删除音频相关时间的数据包 => 包括这个时间戳之前的所有数据包都被删除...
 	this->doEarseAudioByPTS(min_ts);
 }
@@ -151,7 +151,7 @@ void CTeacher::doEarseAudioByPTS(uint32_t inTimeStamp)
 		circlebuf_pop_front(&cur_circle, NULL, nPerPackSize);
 	}
 	// 打印音频拥塞信息 => 当前位置，已发送数据包 => 两者之差就是观看端的有效补包空间...
-	log_trace("[Teacher-Pusher] Audio Jam => MinSeq: %u, MaxSeq: %u, Circle: %d", min_seq, max_seq, cur_circle.size/nPerPackSize);
+	//log_trace("[Teacher-Pusher] Audio Jam => MinSeq: %u, MaxSeq: %u, Circle: %d", min_seq, max_seq, cur_circle.size/nPerPackSize);
 }
 //
 // 返回最小序号包，不用管是否是有效包号...
@@ -550,6 +550,12 @@ void CTeacher::doFillLosePack(uint8_t inPType, uint32_t nStartLoseID, uint32_t n
 	}
   // 把自己加入到补包对象列表当中...
   GetApp()->doAddSupplyForTeacher(this);
+}
+
+bool CTeacher::doIsServerLose(bool bIsAudio, uint32_t inLoseSeq)
+{
+  GM_MapLose & theMapLose = bIsAudio ? m_AudioMapLose : m_VideoMapLose;
+  return ((theMapLose.find(inLoseSeq) != theMapLose.end()) ? true : false);
 }
 
 int CTeacher::doServerSendSupply()
