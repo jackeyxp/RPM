@@ -6,6 +6,7 @@
 #include <netinet/tcp.h>    /* 2017.07.26 - by jackey */
 #include <netinet/in.h>     /* sockaddr_in{} and other Internet defns */
 #include <arpa/inet.h>      /* inet(3) functions */
+#include <sys/epoll.h>      /* epoll function */
 #include <sys/types.h>      /* basic system data types */
 #include <sys/resource.h>   /* setrlimit */
 #include <sys/time.h>

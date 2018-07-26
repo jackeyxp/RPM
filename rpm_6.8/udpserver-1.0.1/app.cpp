@@ -3,10 +3,12 @@
 #include "room.h"
 #include "student.h"
 #include "teacher.h"
+#include "tcpthread.h"
 
 CApp::CApp()
   : m_listen_fd(0)
   , m_sem_t(NULL)
+  , m_lpTCPThread(NULL)
 {
   // 初始化线程互斥对象...
   pthread_mutex_init(&m_mutex, NULL);
@@ -18,6 +20,11 @@ CApp::~CApp()
 {
   // 等待线程退出...
   this->StopAndWaitForThread();
+  // 删除TCP线程对象...
+  if (m_lpTCPThread != NULL) {
+    delete m_lpTCPThread;
+    m_lpTCPThread = NULL;
+  }
   // 先关闭套接字，阻止网络数据到达...
   if( m_listen_fd > 0 ) {
     close(m_listen_fd);
@@ -37,6 +44,20 @@ CApp::~CApp()
   pthread_mutex_destroy(&m_mutex);
   // 释放辅助线程信号量...
   os_sem_destroy(m_sem_t);
+}
+
+bool CApp::doStartThread()
+{
+  // 创建TCP监听对象，并启动线程...
+  assert(m_lpTCPThread == NULL);
+  m_lpTCPThread = new CTCPThread();
+  if (!m_lpTCPThread->InitThread()) {
+    log_trace("Init TCPThread failed!");
+    return false;
+  }
+  // 启动自身附加线程...
+  this->Start();
+  return true;
 }
 
 void CApp::doAddSupplyForTeacher(CTeacher * lpTeacher)

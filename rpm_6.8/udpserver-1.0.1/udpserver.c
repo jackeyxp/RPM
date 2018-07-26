@@ -3,7 +3,7 @@
 #include "bmem.h"
 
 // STL must use g++...
-// g++ -g udpserver.c bmem.c thread.cpp app.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread
+// g++ -g udpserver.c bmem.c thread.cpp app.cpp tcpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
 // valgrind --tool=memcheck --leak-check=full --show-reachable=yes ./udpserver
 
 CApp theApp;
@@ -20,7 +20,8 @@ int main(int argc, char **argv)
   if( theApp.doCreateSocket(DEF_UDP_PORT) < 0 )
     return -1;
   // 启动超时检测线程对象...
-  theApp.Start();
+  if( !theApp.doStartThread() )
+    return -1;
   // 阻塞循环等待网络数据到达...
   theApp.doWaitSocket();
   // 阻塞终止，退出进程...

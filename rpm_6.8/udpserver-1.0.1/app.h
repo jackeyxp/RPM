@@ -4,6 +4,7 @@
 #include "global.h"
 #include "thread.h"
 
+class CTCPThread;
 class CApp : public CThread
 {
 public:
@@ -11,6 +12,7 @@ public:
   virtual ~CApp();
   virtual void Entry();
 public:
+  bool        doStartThread();
   bool        doInitRLimit();
   void        doWaitSocket();
   int         doCreateSocket(int nPort);
@@ -36,4 +38,5 @@ private:
   GM_ListStudent    m_ListStudent;    // 有丢包的学生观看者列表...
   pthread_mutex_t   m_mutex;          // 线程互斥对象...
   os_sem_t     *    m_sem_t;          // 辅助线程信号量...
+  CTCPThread   *    m_lpTCPThread;    // TCP监听线程对象...
 };
