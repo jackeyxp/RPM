@@ -18,6 +18,19 @@ static const char * get_client_type(int inType)
   }
   return "unknown";
 }
+//
+// 获取命令类型...
+static const char * get_command_name(int inCmd)
+{
+  switch(inCmd)
+  {
+    case kCmd_Student_Login:            return "Student_Login";
+    case kCmd_Student_OnLine:           return "Student_OnLine";
+    case kCmd_Teacher_Login:            return "Teacher_Login";
+    case kCmd_Teacher_OnLine:           return "Teacher_OnLine";
+  }
+  return "unknown";
+}
 
 CTCPThread::CTCPThread()
   : m_listen_fd(0)
@@ -205,7 +218,7 @@ void CTCPThread::Entry()
           }
           // 全部成功，打印信息，引用计数增加...
           ++curfds; ++acceptCount;
-          int nSinPort = cliaddr.sin_port;
+          int nSinPort = ntohs(cliaddr.sin_port);
           string strSinAddr = inet_ntoa(cliaddr.sin_addr);
           //log_trace("client count(%d) - increase, accept from %s:%d", acceptCount, strSinAddr.c_str(), nSinPort);
           // 创建客户端对象,并保存到集合当中...
@@ -316,11 +329,11 @@ void CTCPThread::doHandleTimeout()
   }  
 }
 
-CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nSinPort, string & strSinAddr)
-  : m_nConnFD(connfd)
-  , m_nSinPort(nSinPort)
+CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nHostPort, string & strSinAddr)
+  : m_nClientType(0)
+  , m_nConnFD(connfd)
+  , m_nHostPort(nHostPort)
   , m_strSinAddr(strSinAddr)
-  , m_nClientType(kClientPHP)
   , m_lpTCPThread(lpTCPThread)
 {
   assert(m_nConnFD > 0 && m_strSinAddr.size() > 0 );
@@ -331,6 +344,9 @@ CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nSinPort, strin
 
 CTCPClient::~CTCPClient()
 {
+  // 打印终端退出信息...
+  log_debug("Client Delete: %s, From: %s:%d, Socket: %d", get_client_type(m_nClientType), 
+            this->m_strSinAddr.c_str(), this->m_nHostPort, this->m_nConnFD);
 }
 //
 // 发送网络数据 => 始终设置读事件...
@@ -406,7 +422,83 @@ int CTCPClient::ForRead()
         return nResult;
       assert( nResult >= 0 );
     }
+    // 打印调试信息到控制台，播放器类型，命令名称，IP地址端口，套接字...
+    // 调试模式 => 只打印，不存盘到日志文件...
+    log_debug("Client Command(%s - %s, From: %s:%d, Socket: %d)", 
+              get_client_type(m_nClientType), get_command_name(lpCmdHeader->m_cmd),
+              this->m_strSinAddr.c_str(), this->m_nHostPort, this->m_nConnFD);
+    // 对数据进行用户类型分发...
+    switch( m_nClientType )
+    {
+      case kClientPHP:      nResult = this->doPHPClient(lpCmdHeader, lpDataPtr); break;
+      case kClientStudent:  nResult = this->doStudentClient(lpCmdHeader, lpDataPtr); break;
+      case kClientTeacher:  nResult = this->doTeacherClient(lpCmdHeader, lpDataPtr); break;
+    }
+		// 删除已经处理完毕的数据 => Header + pkg_len...
+		m_strRecv.erase(0, lpCmdHeader->m_pkg_len + sizeof(Cmd_Header));
+    // 判断是否已经发生了错误...
+    if( nResult < 0 )
+      return nResult;
+    // 如果没有错误，继续执行...
+    assert( nResult >= 0 );
   }  
+  return 0;
+}
+
+// 处理PHP客户端事件...
+int CTCPClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
+{
+  return 0;
+}
+
+// 处理Student事件...
+int CTCPClient::doStudentClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
+{
+  int nResult = -1;
+  switch(lpHeader->m_cmd)
+  {
+    case kCmd_Student_Login:      nResult = this->doCmdLoginProcess(); break;
+    case kCmd_Student_OnLine:     nResult = this->doCmdStudentOnLine(); break;
+  }
+  return nResult;
+}
+
+int CTCPClient::doCmdLoginProcess()
+{
+  // 处理采集端登录过程 => 判断传递JSON数据有效性...
+  if( m_MapJson.find("mac_addr") == m_MapJson.end() ||
+    m_MapJson.find("ip_addr") == m_MapJson.end() ||
+    m_MapJson.find("room_id") == m_MapJson.end() ) {
+    return -1;
+  }
+  // 保存解析到的有效JSON数据项...
+  m_strMacAddr = m_MapJson["mac_addr"];
+  m_strIPAddr  = m_MapJson["ip_addr"];
+  m_strRoomID  = m_MapJson["room_id"];
+  // 不用回复，直接返回...
+  return 0;  
+}
+
+int CTCPClient::doCmdStudentOnLine()
+{
+  return 0;
+}
+
+// 处理Teacher事件...
+int CTCPClient::doTeacherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
+{
+  int nResult = -1;
+  switch(lpHeader->m_cmd)
+  {
+    case kCmd_Teacher_Login:        nResult = this->doCmdLoginProcess(); break;
+    case kCmd_Teacher_OnLine:       nResult = this->doCmdTeacherOnLine(); break;
+  }
+  return 0;
+}
+
+// 处理Teacher在线汇报命令...
+int CTCPClient::doCmdTeacherOnLine()
+{
   return 0;
 }
 //
