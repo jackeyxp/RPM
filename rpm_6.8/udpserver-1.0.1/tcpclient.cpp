@@ -179,9 +179,10 @@ int CTCPClient::doCmdStudentLogin()
 
 int CTCPClient::doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine)
 {
-  // 构造转发JSON数据块...
+  // 构造转发JSON数据块 => 返回套接字|TCP讲师|UDP讲师...
   char szSendBuf[MAX_PATH_SIZE] = {0};
   json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "tcp_socket", json_object_new_int(m_nConnFD));
   json_object_object_add(new_obj, "tcp_teacher", json_object_new_int(bIsTCPOnLine));
   json_object_object_add(new_obj, "udp_teacher", json_object_new_int(bIsUDPOnLine));
   // 转换成json字符串，获取字符串长度...
@@ -189,13 +190,12 @@ int CTCPClient::doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine)
   int nBodyLen = strlen(lpNewJson);
   // 构造回复结构头信息...
   Cmd_Header theHeader = {0};
-  theHeader.m_type = kClientStudent;
+  theHeader.m_type = m_nClientType;
   theHeader.m_cmd  = kCmd_Student_Login;
   theHeader.m_pkg_len = nBodyLen;
   memcpy(szSendBuf, &theHeader, sizeof(theHeader));
   memcpy(szSendBuf+sizeof(theHeader), lpNewJson, nBodyLen);
   // 向学生端对象发送组合后的数据包...
-  assert( m_nClientType == kClientStudent );
   m_strSend.assign(szSendBuf, nBodyLen+sizeof(theHeader));
   // json对象引用计数减少...
   json_object_put(new_obj);
@@ -222,6 +222,38 @@ void CTCPClient::doUDPTeacherPusherOnLine(bool bIsOnLineFlag)
   bool bIsUDPTeacherOnLine = bIsOnLineFlag;
   // 向本学生端转发登录成功命令通知...
   this->doSendCmdLoginForStudent(bIsTCPTeacherOnLine, bIsUDPTeacherOnLine);
+}
+
+// 将相关联的UDP终端退出的事件转发给TCP终端连接对象...
+void CTCPClient::doLogoutForUDP(uint8_t tmTag, uint8_t idTag)
+{
+  // 构造转发JSON数据块 => UDP的终端类型和身份类型 => tmTag | idTag...
+  char szSendBuf[MAX_PATH_SIZE] = {0};
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "tm_tag", json_object_new_int(tmTag));
+  json_object_object_add(new_obj, "id_tag", json_object_new_int(idTag));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  int nBodyLen = strlen(lpNewJson);
+  // 构造回复结构头信息...
+  Cmd_Header theHeader = {0};
+  theHeader.m_type = m_nClientType;
+  theHeader.m_cmd  = kCmd_UDP_Logout;
+  theHeader.m_pkg_len = nBodyLen;
+  memcpy(szSendBuf, &theHeader, sizeof(theHeader));
+  memcpy(szSendBuf+sizeof(theHeader), lpNewJson, nBodyLen);
+  // 向学生端对象发送组合后的数据包...
+  m_strSend.assign(szSendBuf, nBodyLen+sizeof(theHeader));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 向学生端对象发起发送数据事件...
+  epoll_event evClient = {0};
+  evClient.data.fd = m_nConnFD;
+  evClient.events = EPOLLOUT | EPOLLET;
+  // 重新修改事件，加入写入事件...
+  if( epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, m_nConnFD, &evClient) < 0 ) {
+    log_trace("mod socket '%d' to epoll failed: %s", m_nConnFD, strerror(errno));
+  }
 }
 
 int CTCPClient::doCmdStudentOnLine()
@@ -258,6 +290,34 @@ int CTCPClient::doCmdTeacherLogin()
   // 创建或更新房间，更新房间里的讲师端...
   m_lpTCPRoom = m_lpTCPThread->doCreateRoom(m_nRoomID);
   m_lpTCPRoom->doCreateTeacher(this);
+  // 构造转发JSON数据块 => 返回TCP套接字...
+  char szSendBuf[MAX_PATH_SIZE] = {0};
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "tcp_socket", json_object_new_int(m_nConnFD));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  int nBodyLen = strlen(lpNewJson);
+  // 构造回复结构头信息...
+  Cmd_Header theHeader = {0};
+  theHeader.m_type = m_nClientType;
+  theHeader.m_cmd  = kCmd_Teacher_Login;
+  theHeader.m_pkg_len = nBodyLen;
+  memcpy(szSendBuf, &theHeader, sizeof(theHeader));
+  memcpy(szSendBuf+sizeof(theHeader), lpNewJson, nBodyLen);
+  // 向学生端对象发送组合后的数据包...
+  m_strSend.assign(szSendBuf, nBodyLen+sizeof(theHeader));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 向学生端对象发起发送数据事件...
+  epoll_event evClient = {0};
+  evClient.data.fd = m_nConnFD;
+  evClient.events = EPOLLOUT | EPOLLET;
+  // 重新修改事件，加入写入事件...
+  if( epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, m_nConnFD, &evClient) < 0 ) {
+    log_trace("mod socket '%d' to epoll failed: %s", m_nConnFD, strerror(errno));
+    return -1;
+  }
+  // 返回执行正确...
   return 0;
 }
 

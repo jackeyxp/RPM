@@ -22,6 +22,7 @@ public:
   void        doDelSupplyForTeacher(CTeacher * lpTeacher);
   bool        IsUDPTeacherPusherOnLine(int inRoomID);
   void        doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag);
+  void        doLogoutForUDP(int nTCPSockFD, uint8_t tmTag, uint8_t idTag);
 public:
   int         GetListenFD() { return m_listen_fd; }
   CRoom   *   doCreateRoom(int inRoomID, int inLiveID);

@@ -15,6 +15,7 @@ public:
   bool      IsTimeout();          // 检测是否超时
   void      ResetTimeout();       // 重置超时时间
   void      doUDPTeacherPusherOnLine(bool bIsOnLineFlag);
+  void      doLogoutForUDP(uint8_t tmTag, uint8_t idTag);
 public:
   int       GetConnFD() { return m_nConnFD; }
   int       GetRoomID() { return m_nRoomID; }

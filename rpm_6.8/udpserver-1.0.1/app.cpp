@@ -46,6 +46,13 @@ CApp::~CApp()
   os_sem_destroy(m_sem_t);
 }
 
+void CApp::doLogoutForUDP(int nTCPSockFD, uint8_t tmTag, uint8_t idTag)
+{
+  if( m_lpTCPThread == NULL )
+    return;
+  m_lpTCPThread->doLogoutForUDP(nTCPSockFD, tmTag, idTag);
+}
+
 void CApp::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
 {
   if( m_lpTCPThread == NULL )
@@ -424,18 +431,9 @@ bool CApp::doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr)
   itorItem = m_MapNetwork.find(nHostSinPort);
   // 如果没有找到创建一个新的对象...
   if( itorItem == m_MapNetwork.end() ) {
-    // 注意：激发重建操作的通常就是探测命令 => 每秒探测一次...
-    // 注意：被服务器超时删除之后，才会发生重建...
-    // 如果不是创建命令 => 返回重建命令...
+    // 如果不是创建命令 => 打印错误信息...
     if( ptTag != PT_TAG_CREATE ) {
-      rtp_reload_t theReload = {0};
-      theReload.tm = TM_TAG_SERVER;
-      theReload.id = ID_TAG_SERVER;
-      theReload.pt = PT_TAG_RELOAD;
-      // 直接返回重建命令包...
-      sendto(m_listen_fd, &theReload, sizeof(theReload), 0, (sockaddr*)&inAddr, sizeof(inAddr));
-      // 打印重建命令已发出的信息通知...
-      log_debug("Server Reload for tmTag: %d, idTag: %d, ptTag: %d", tmTag, idTag, ptTag);
+      log_debug("Server Reject for tmTag: %d, idTag: %d, ptTag: %d", tmTag, idTag, ptTag);
       return false;
     }
     assert( ptTag == PT_TAG_CREATE );

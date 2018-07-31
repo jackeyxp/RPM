@@ -39,7 +39,6 @@ enum
   PT_TAG_SUPPLY  = 0x04,  // 补包命令标记...
   PT_TAG_HEADER  = 0x05,  // 音视频序列头...
   PT_TAG_READY   = 0x06,  // 准备继续命令...
-  PT_TAG_RELOAD  = 0x07,  // 重建命令标记 => 专属服务器的命令...
   PT_TAG_AUDIO   = 0x08,  // 音频包 => FLV_TAG_TYPE_AUDIO...
   PT_TAG_VIDEO   = 0x09,  // 视频包 => FLV_TAG_TYPE_VIDEO...
   PT_TAG_LOSE    = 0x0A,  // 已丢失数据包...
@@ -72,6 +71,7 @@ typedef struct {
   unsigned char   noset;        // 保留 => 字节对齐
   unsigned short  liveID;       // 学生端摄像头编号
   unsigned int    roomID;       // 教室房间编号
+  unsigned int    tcpSock;      // 关联的TCP套接字
 }rtp_create_t;
 //
 // 定义删除命令结构体 => PT_TAG_DELETE
@@ -123,16 +123,6 @@ typedef struct {
   unsigned short  recvPort;     // 接收者穿透端口 => 备用 => host
   unsigned int    recvAddr;     // 接收者穿透地址 => 备用 => host
 }rtp_ready_t;
-//
-// 定义重建命令结构体 => PT_TAG_RELOAD
-typedef struct {
-  unsigned char   tm:2;         // terminate type => TM_TAG_SERVER
-  unsigned char   id:2;         // identify type => ID_TAG_SERVER
-  unsigned char   pt:4;         // payload type => PT_TAG_RELOAD
-  unsigned char   noset;        // 保留 => 字节对齐
-  unsigned short  reload_count; // 重建次数 => 由接收端处理...
-  unsigned int    reload_time;  // 重建时间 => 有接收端处理...
-}rtp_reload_t;
 //
 // 定义RTP数据包头结构体 => PT_TAG_AUDIO | PT_TAG_VIDEO
 typedef struct {

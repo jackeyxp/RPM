@@ -32,6 +32,24 @@ CTCPThread::~CTCPThread()
   pthread_mutex_destroy(&m_mutex);  
 }
 
+// 响应UDP终端退出时的时间转发通知...
+void CTCPThread::doLogoutForUDP(int nTCPSockFD, uint8_t tmTag, uint8_t idTag)
+{
+  // 进入线程互斥保护...
+  pthread_mutex_lock(&m_mutex);
+  CTCPClient * lpTCPClient = NULL;
+  GM_MapTCPConn::iterator itorItem;
+  do {
+    itorItem = m_MapConnect.find(nTCPSockFD);
+    if( itorItem == m_MapConnect.end() )
+      break;
+    lpTCPClient = itorItem->second;
+    lpTCPClient->doLogoutForUDP(tmTag, idTag);
+  } while( false );
+  // 退出线程互斥保护...
+  pthread_mutex_unlock(&m_mutex);  
+}
+
 // 响应UDP讲师推流端上线的事件通知 => 转发登录命令给所有在线学生端...
 void CTCPThread::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
 {
@@ -232,9 +250,13 @@ void CTCPThread::Entry()
           int nSinPort = ntohs(cliaddr.sin_port);
           string strSinAddr = inet_ntoa(cliaddr.sin_addr);
           //log_trace("client count(%d) - increase, accept from %s:%d", acceptCount, strSinAddr.c_str(), nSinPort);
+          // 进入线程互斥保护...
+          pthread_mutex_lock(&m_mutex);
           // 创建客户端对象,并保存到集合当中...
           CTCPClient * lpTCPClient = new CTCPClient(this, connfd, nSinPort, strSinAddr);
           m_MapConnect[connfd] = lpTCPClient;
+          // 退出线程互斥保护...
+          pthread_mutex_unlock(&m_mutex);  
         }
       } else {
         // 进入线程互斥保护...
@@ -246,8 +268,6 @@ void CTCPThread::Entry()
         } else if( m_events[n].events & EPOLLOUT ) {
           nRetValue = this->doHandleWrite(nCurEventFD);
         }
-        // 退出线程互斥保护...
-        pthread_mutex_unlock(&m_mutex);  
         // 判断处理结果...
         if( nRetValue < 0 ) {
           // 处理失败，从epoll队列中删除...
@@ -265,6 +285,8 @@ void CTCPThread::Entry()
           --curfds; --acceptCount;
           //log_trace("client count(%d) - decrease", acceptCount);
         }
+        // 退出线程互斥保护...
+        pthread_mutex_unlock(&m_mutex);  
       }
     }
   }
