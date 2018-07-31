@@ -1,36 +1,9 @@
 
 #include "tcpthread.h"
-#include <json/json.h>
+#include "tcpclient.h"
+#include "tcproom.h"
 
 #define WAIT_TIME_OUT     10 * 1000   // 全局超时检测10秒...
-#define MAX_LINE_SIZE     64 * 1024   // 2017.07.25 - by jackey => 避免录像任务命令，造成溢出...
-#define CLIENT_TIME_OUT      1 * 60   // 客户端超时断开时间1分钟(汇报频率30秒)...
-
-//
-// 获取用户类型...
-static const char * get_client_type(int inType)
-{
-  switch(inType)
-  {
-    case kClientPHP:     return "PHP";
-    case kClientStudent: return "Student";
-    case kClientTeacher: return "Teacher";
-  }
-  return "unknown";
-}
-//
-// 获取命令类型...
-static const char * get_command_name(int inCmd)
-{
-  switch(inCmd)
-  {
-    case kCmd_Student_Login:            return "Student_Login";
-    case kCmd_Student_OnLine:           return "Student_OnLine";
-    case kCmd_Teacher_Login:            return "Teacher_Login";
-    case kCmd_Teacher_OnLine:           return "Teacher_OnLine";
-  }
-  return "unknown";
-}
 
 CTCPThread::CTCPThread()
   : m_listen_fd(0)
@@ -46,13 +19,51 @@ CTCPThread::~CTCPThread()
 {
   // 等待线程退出...
   this->StopAndWaitForThread();
-  // 先关闭套接字，阻止网络数据到达...
+  // 关闭套接字，阻止网络数据到达...
   if( m_listen_fd > 0 ) {
     close(m_listen_fd);
     m_listen_fd = 0;
   }
+  // 删除所有的客户端连接...
+  this->clearAllClient();
+  // 删除所有的房间对象...
+  this->clearAllRoom();
   // 删除线程互斥对象...
   pthread_mutex_destroy(&m_mutex);  
+}
+
+// 响应UDP讲师推流端上线的事件通知 => 转发登录命令给所有在线学生端...
+void CTCPThread::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
+{
+  // 进入线程互斥保护...
+  pthread_mutex_lock(&m_mutex);
+  CTCPRoom * lpTCPRoom = NULL;
+  GM_MapTCPRoom::iterator itorRoom;
+  do {
+    itorRoom = m_MapTCPRoom.find(inRoomID);
+    if( itorRoom == m_MapTCPRoom.end() )
+      break;
+    lpTCPRoom = itorRoom->second; assert(lpTCPRoom != NULL);
+    lpTCPRoom->doUDPTeacherPusherOnLine(bIsOnLineFlag);
+  } while( false );
+  // 退出线程互斥保护...
+  pthread_mutex_unlock(&m_mutex);  
+}
+
+// 创建房间 => 通过房间号进行创建...
+CTCPRoom * CTCPThread::doCreateRoom(int inRoomID)
+{
+  // 如果找到了房间对象，直接返回...
+  CTCPRoom * lpTCPRoom = NULL;
+  GM_MapTCPRoom::iterator itorRoom = m_MapTCPRoom.find(inRoomID);
+  if( itorRoom != m_MapTCPRoom.end() ) {
+    lpTCPRoom = itorRoom->second;
+    return lpTCPRoom;
+  }
+  // 如果没有找到房间，创建一个新的房间...
+  lpTCPRoom = new CTCPRoom(inRoomID);
+  m_MapTCPRoom[inRoomID] = lpTCPRoom;
+  return lpTCPRoom;
 }
 
 bool CTCPThread::InitThread()
@@ -226,6 +237,8 @@ void CTCPThread::Entry()
           m_MapConnect[connfd] = lpTCPClient;
         }
       } else {
+        // 进入线程互斥保护...
+        pthread_mutex_lock(&m_mutex);
         // 处理客户端socket事件...
         int nRetValue = -1;
         if( m_events[n].events & EPOLLIN ) {
@@ -233,6 +246,8 @@ void CTCPThread::Entry()
         } else if( m_events[n].events & EPOLLOUT ) {
           nRetValue = this->doHandleWrite(nCurEventFD);
         }
+        // 退出线程互斥保护...
+        pthread_mutex_unlock(&m_mutex);  
         // 判断处理结果...
         if( nRetValue < 0 ) {
           // 处理失败，从epoll队列中删除...
@@ -255,16 +270,28 @@ void CTCPThread::Entry()
   }
   // clear all the connected client...
   this->clearAllClient();
+  // clear all create room...
+  this->clearAllRoom();
   // close listen socket and exit...
   log_trace("tcp-thread exit.");
   close(m_listen_fd);
   m_listen_fd = 0;
 }
 //
+// 删除所有的房间对象列表...
+void CTCPThread::clearAllRoom()
+{
+  GM_MapTCPRoom::iterator itorRoom;
+  for(itorRoom = m_MapTCPRoom.begin(); itorRoom != m_MapTCPRoom.end(); ++itorRoom) {
+    delete itorRoom->second;
+  }
+  m_MapTCPRoom.clear();  
+}
+//
 // 删除所有的客户端连接...
 void CTCPThread::clearAllClient()
 {
-  GM_MapConn::iterator itorItem;
+  GM_MapTCPConn::iterator itorItem;
   for(itorItem = m_MapConnect.begin(); itorItem != m_MapConnect.end(); ++itorItem) {
     delete itorItem->second;
   }
@@ -275,7 +302,7 @@ void CTCPThread::clearAllClient()
 int CTCPThread::doHandleRead(int connfd)
 {
   // 在集合中查找客户端对象...
-  GM_MapConn::iterator itorConn = m_MapConnect.find(connfd);
+  GM_MapTCPConn::iterator itorConn = m_MapConnect.find(connfd);
   if( itorConn == m_MapConnect.end() ) {
     log_trace("can't find client connection(%d)", connfd);
 		return -1;
@@ -289,7 +316,7 @@ int CTCPThread::doHandleRead(int connfd)
 int CTCPThread::doHandleWrite(int connfd)
 {
   // 在集合中查找客户端对象...
-  GM_MapConn::iterator itorConn = m_MapConnect.find(connfd);
+  GM_MapTCPConn::iterator itorConn = m_MapConnect.find(connfd);
   if( itorConn == m_MapConnect.end() ) {
     log_trace("can't find client connection(%d)", connfd);
 		return -1;
@@ -306,7 +333,7 @@ void CTCPThread::doHandleTimeout()
   // 2017.12.16 - by jackey => 去掉gettcpstate，使用超时机制...
   // 遍历所有的连接，判断连接是否超时，超时直接删除...
   CTCPClient * lpTCPClient = NULL;
-  GM_MapConn::iterator itorConn;
+  GM_MapTCPConn::iterator itorConn;
   itorConn = m_MapConnect.begin();
   while( itorConn != m_MapConnect.end() ) {
     lpTCPClient = itorConn->second;
@@ -327,220 +354,4 @@ void CTCPThread::doHandleTimeout()
       ++itorConn;
     }
   }  
-}
-
-CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nHostPort, string & strSinAddr)
-  : m_nClientType(0)
-  , m_nConnFD(connfd)
-  , m_nHostPort(nHostPort)
-  , m_strSinAddr(strSinAddr)
-  , m_lpTCPThread(lpTCPThread)
-{
-  assert(m_nConnFD > 0 && m_strSinAddr.size() > 0 );
-  assert(m_lpTCPThread != NULL);
-  m_nStartTime = time(NULL);
-  m_epoll_fd = m_lpTCPThread->GetEpollFD();
-}
-
-CTCPClient::~CTCPClient()
-{
-  // 打印终端退出信息...
-  log_debug("Client Delete: %s, From: %s:%d, Socket: %d", get_client_type(m_nClientType), 
-            this->m_strSinAddr.c_str(), this->m_nHostPort, this->m_nConnFD);
-}
-//
-// 发送网络数据 => 始终设置读事件...
-int CTCPClient::ForWrite()
-{
-  // 如果没有需要发送的数据，直接返回...
-  if( m_strSend.size() <= 0 )
-    return 0;
-  // 发送全部的数据包内容...
-  assert( m_strSend.size() > 0 );
-  int nWriteLen = write(m_nConnFD, m_strSend.c_str(), m_strSend.size());
-  if( nWriteLen <= 0 ) {
-    log_trace("transmit command error(%s)", strerror(errno));
-    return -1;
-  }
-  // 每次发送成功，必须清空发送缓存...
-  m_strSend.clear();
-  // 准备修改事件需要的数据 => 写事件之后，一定是读事件...
-  struct epoll_event evClient = {0};
-	evClient.data.fd = m_nConnFD;
-  evClient.events = EPOLLIN | EPOLLET;
-  // 重新修改事件，加入读取事件...
-	if( epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, m_nConnFD, &evClient) < 0 ) {
-    log_trace("mod socket '%d' to epoll failed: %s", m_nConnFD, strerror(errno));
-    return -1;
-  }
-  // 操作成功，返回0...
-  return 0;
-}
-//
-// 读取网络数据...
-int CTCPClient::ForRead()
-{
-  // 直接读取网络数据...
-	char bufRead[MAX_LINE_SIZE] = {0};
-	int  nReadLen = read(m_nConnFD, bufRead, MAX_LINE_SIZE);
-  // 读取失败，返回错误，让上层关闭...
-  if( nReadLen == 0 ) {
-    //log_trace("Client: %s, ForRead: Close, Socket: %d", get_client_type(m_nClientType), this->m_nConnFD);
-    return -1;
-  }
-  // 读取失败，返回错误，让上层关闭...
-  if( nReadLen < 0 ) {
-		log_trace("Client: %s, read error(%s)", get_client_type(m_nClientType), strerror(errno));
-    return -1;
-  }
-  // 读取数据有效，重置超时时间...
-  this->ResetTimeout();
-	// 追加读取数据并构造解析头指针...
-	m_strRecv.append(bufRead, nReadLen);
-	// 这里网络数据会发生粘滞现象，因此，需要循环执行...
-	while( m_strRecv.size() > 0 ) {
-		// 得到的数据长度不够，直接返回，等待新数据...
-    int nCmdLength = sizeof(Cmd_Header);
-    if( m_strRecv.size() < nCmdLength )
-      return 0;
-    // 得到数据的有效长度和指针...
-    assert( m_strRecv.size() >= nCmdLength );
-    Cmd_Header * lpCmdHeader = (Cmd_Header*)m_strRecv.c_str();
-    const char * lpDataPtr = m_strRecv.c_str() + sizeof(Cmd_Header);
-    int nDataSize = m_strRecv.size() - sizeof(Cmd_Header);
-		// 已获取的数据长度不够，直接返回，等待新数据...
-		if( nDataSize < lpCmdHeader->m_pkg_len )
-			return 0;
-    // 数据区有效，保存用户类型...
-    m_nClientType = lpCmdHeader->m_type;
-    assert( nDataSize >= lpCmdHeader->m_pkg_len );
-    // 判断是否需要解析JSON数据包，解析错误，直接删除链接...
-    int nResult = -1;
-    if( lpCmdHeader->m_pkg_len > 0 ) {
-      nResult = this->parseJsonData(lpDataPtr, lpCmdHeader->m_pkg_len);
-      if( nResult < 0 )
-        return nResult;
-      assert( nResult >= 0 );
-    }
-    // 打印调试信息到控制台，播放器类型，命令名称，IP地址端口，套接字...
-    // 调试模式 => 只打印，不存盘到日志文件...
-    log_debug("Client Command(%s - %s, From: %s:%d, Socket: %d)", 
-              get_client_type(m_nClientType), get_command_name(lpCmdHeader->m_cmd),
-              this->m_strSinAddr.c_str(), this->m_nHostPort, this->m_nConnFD);
-    // 对数据进行用户类型分发...
-    switch( m_nClientType )
-    {
-      case kClientPHP:      nResult = this->doPHPClient(lpCmdHeader, lpDataPtr); break;
-      case kClientStudent:  nResult = this->doStudentClient(lpCmdHeader, lpDataPtr); break;
-      case kClientTeacher:  nResult = this->doTeacherClient(lpCmdHeader, lpDataPtr); break;
-    }
-		// 删除已经处理完毕的数据 => Header + pkg_len...
-		m_strRecv.erase(0, lpCmdHeader->m_pkg_len + sizeof(Cmd_Header));
-    // 判断是否已经发生了错误...
-    if( nResult < 0 )
-      return nResult;
-    // 如果没有错误，继续执行...
-    assert( nResult >= 0 );
-  }  
-  return 0;
-}
-
-// 处理PHP客户端事件...
-int CTCPClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
-{
-  return 0;
-}
-
-// 处理Student事件...
-int CTCPClient::doStudentClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
-{
-  int nResult = -1;
-  switch(lpHeader->m_cmd)
-  {
-    case kCmd_Student_Login:      nResult = this->doCmdLoginProcess(); break;
-    case kCmd_Student_OnLine:     nResult = this->doCmdStudentOnLine(); break;
-  }
-  return nResult;
-}
-
-int CTCPClient::doCmdLoginProcess()
-{
-  // 处理采集端登录过程 => 判断传递JSON数据有效性...
-  if( m_MapJson.find("mac_addr") == m_MapJson.end() ||
-    m_MapJson.find("ip_addr") == m_MapJson.end() ||
-    m_MapJson.find("room_id") == m_MapJson.end() ) {
-    return -1;
-  }
-  // 保存解析到的有效JSON数据项...
-  m_strMacAddr = m_MapJson["mac_addr"];
-  m_strIPAddr  = m_MapJson["ip_addr"];
-  m_strRoomID  = m_MapJson["room_id"];
-  // 不用回复，直接返回...
-  return 0;  
-}
-
-int CTCPClient::doCmdStudentOnLine()
-{
-  return 0;
-}
-
-// 处理Teacher事件...
-int CTCPClient::doTeacherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
-{
-  int nResult = -1;
-  switch(lpHeader->m_cmd)
-  {
-    case kCmd_Teacher_Login:        nResult = this->doCmdLoginProcess(); break;
-    case kCmd_Teacher_OnLine:       nResult = this->doCmdTeacherOnLine(); break;
-  }
-  return 0;
-}
-
-// 处理Teacher在线汇报命令...
-int CTCPClient::doCmdTeacherOnLine()
-{
-  return 0;
-}
-//
-// 统一的JSON解析接口 => 保存到集合对象当中...
-int CTCPClient::parseJsonData(const char * lpJsonPtr, int nJsonLength)
-{
-  // 首先判断输入数据的有效性...
-  if( lpJsonPtr == NULL || nJsonLength <= 0 )
-    return -1;
-  // 清空上次解析的结果...
-  m_MapJson.clear();
-  // 解析 JSON 数据包失败，直接返回错误号...
-  json_object * new_obj = json_tokener_parse(lpJsonPtr);
-  if( new_obj == NULL ) {
-    log_trace("parse json data error");
-    return -1;
-  }
-  // check the json type => must be json_type_object...
-  json_type nJsonType = json_object_get_type(new_obj);
-  if( nJsonType != json_type_object ) {
-    log_trace("parse json data error");
-    json_object_put(new_obj);
-    return -1;
-  }
-  // 解析传递过来的JSON数据包，存入集合当中...
-  json_object_object_foreach(new_obj, key, val) {
-    m_MapJson[key] = json_object_get_string(val);
-  }
-  // 解析数据完毕，释放JSON对象...
-  json_object_put(new_obj);
-  return 0;
-}
-//
-// 检测是否超时...
-bool CTCPClient::IsTimeout()
-{
-  time_t nDeltaTime = time(NULL) - m_nStartTime;
-  return ((nDeltaTime >= CLIENT_TIME_OUT) ? true : false);
-}
-//
-// 重置超时时间...
-void CTCPClient::ResetTimeout()
-{
-  m_nStartTime = time(NULL);
 }

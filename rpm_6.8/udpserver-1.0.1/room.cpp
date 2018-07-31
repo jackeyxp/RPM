@@ -1,4 +1,5 @@
 
+#include "app.h"
 #include "room.h"
 #include "student.h"
 #include "teacher.h"
@@ -73,6 +74,12 @@ void CRoom::doCreateTeacher(CTeacher * lpTeacher)
 {
   uint8_t idTag = lpTeacher->GetIdTag();
   if( idTag == ID_TAG_PUSHER ) {
+    // 如果新的讲师推流对象与原有对象不相同 => 告诉所有TCP在线学生端，可以创建拉流线程了...
+    if( m_lpTeacherPusher != lpTeacher ) {
+      m_lpTeacherPusher = lpTeacher;
+      GetApp()->doUDPTeacherPusherOnLine(m_nRoomID, true);
+    }
+    // 将新的讲师推流对象保存起来...
     m_lpTeacherPusher = lpTeacher;
   } else if( idTag == ID_TAG_LOOKER ) {
     m_lpTeacherLooker = lpTeacher;
@@ -82,8 +89,9 @@ void CRoom::doCreateTeacher(CTeacher * lpTeacher)
 // 处理老师端删除事件...
 void CRoom::doDeleteTeacher(CTeacher * lpTeacher)
 {
-  // 如果是老师推流端，置空，返回...
+  // 如果是老师推流端 => 告诉所有TCP在线学生端，可以删除拉流线程了
   if( m_lpTeacherPusher == lpTeacher ) {
+    GetApp()->doUDPTeacherPusherOnLine(m_nRoomID, false);
     m_lpTeacherPusher = NULL;
     return;
   }

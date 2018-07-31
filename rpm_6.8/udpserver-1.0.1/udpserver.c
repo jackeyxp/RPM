@@ -3,7 +3,7 @@
 #include "bmem.h"
 
 // STL must use g++...
-// g++ -g udpserver.c bmem.c thread.cpp app.cpp tcpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
+// g++ -g udpserver.c bmem.c thread.cpp app.cpp tcproom.cpp tcpclient.cpp tcpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
 // valgrind --tool=memcheck --leak-check=full --show-reachable=yes ./udpserver
 
 CApp theApp;
@@ -195,4 +195,29 @@ int os_sem_timedwait(os_sem_t *sem, unsigned long milliseconds)
   clock_gettime(CLOCK_REALTIME, &ts);
   add_ms_to_ts(&ts, milliseconds);
   return sem_timedwait(&sem->sem, &ts);
+}
+
+// 获取用户类型...
+const char * get_client_type(int inType)
+{
+  switch(inType)
+  {
+    case kClientPHP:     return "PHP";
+    case kClientStudent: return "Student";
+    case kClientTeacher: return "Teacher";
+  }
+  return "unknown";
+}
+
+// 获取命令类型...
+const char * get_command_name(int inCmd)
+{
+  switch(inCmd)
+  {
+    case kCmd_Student_Login:            return "Student_Login";
+    case kCmd_Student_OnLine:           return "Student_OnLine";
+    case kCmd_Teacher_Login:            return "Teacher_Login";
+    case kCmd_Teacher_OnLine:           return "Teacher_OnLine";
+  }
+  return "unknown";
 }

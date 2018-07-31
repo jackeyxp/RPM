@@ -20,6 +20,8 @@ public:
   void        doDelLoseForStudent(CStudent * lpStudent);
   void        doAddSupplyForTeacher(CTeacher * lpTeacher);
   void        doDelSupplyForTeacher(CTeacher * lpTeacher);
+  bool        IsUDPTeacherPusherOnLine(int inRoomID);
+  void        doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag);
 public:
   int         GetListenFD() { return m_listen_fd; }
   CRoom   *   doCreateRoom(int inRoomID, int inLiveID);

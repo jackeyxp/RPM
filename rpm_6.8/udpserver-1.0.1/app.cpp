@@ -46,6 +46,32 @@ CApp::~CApp()
   os_sem_destroy(m_sem_t);
 }
 
+void CApp::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
+{
+  if( m_lpTCPThread == NULL )
+    return;
+  m_lpTCPThread->doUDPTeacherPusherOnLine(inRoomID, bIsOnLineFlag);
+}
+
+bool CApp::IsUDPTeacherPusherOnLine(int inRoomID)
+{
+  // 首先进行线程互斥...
+  pthread_mutex_lock(&m_mutex);
+  bool bOnLine = false;
+  CRoom * lpRoom = NULL;
+  GM_MapRoom::iterator itorRoom;
+  do {
+    itorRoom = m_MapRoom.find(inRoomID);
+    if( itorRoom == m_MapRoom.end() )
+      break;
+    lpRoom = itorRoom->second; assert(lpRoom != NULL);
+    bOnLine = ((lpRoom->GetTeacherPusher() != NULL) ? true : false);
+  } while( false );
+  // 退出互斥，返回查找结果...
+  pthread_mutex_unlock(&m_mutex);  
+  return bOnLine;
+}
+
 bool CApp::doStartThread()
 {
   // 创建TCP监听对象，并启动线程...

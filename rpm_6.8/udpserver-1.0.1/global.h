@@ -77,12 +77,17 @@ int       os_sem_post(os_sem_t *sem);
 int       os_sem_wait(os_sem_t *sem);
 int       os_sem_timedwait(os_sem_t *sem, unsigned long milliseconds);
 
+const char * get_client_type(int inType);
+const char * get_command_name(int inCmd);
+
 //////////////////////////////////////////////////////////////////////////
 // 以下是有关TCP中转服务器的相关变量和类型定义...
 //////////////////////////////////////////////////////////////////////////
+class CTCPRoom;
 class CTCPClient;
-typedef map<int, CTCPClient*>   GM_MapConn;   // connfd   => CTCPClient*
-typedef map<string, string>     GM_MapJson;   // key      => value => JSON map object...
+typedef map<int, CTCPRoom*>     GM_MapTCPRoom;  // RoomID   => CTCPRoom*
+typedef map<int, CTCPClient*>   GM_MapTCPConn;  // connfd   => CTCPClient*
+typedef map<string, string>     GM_MapJson;     // key      => value => JSON map object...
 
 // define client type...
 enum {
