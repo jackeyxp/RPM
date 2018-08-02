@@ -46,11 +46,11 @@ CApp::~CApp()
   os_sem_destroy(m_sem_t);
 }
 
-void CApp::doLogoutForUDP(int nTCPSockFD, uint8_t tmTag, uint8_t idTag)
+void CApp::doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag)
 {
   if( m_lpTCPThread == NULL )
     return;
-  m_lpTCPThread->doLogoutForUDP(nTCPSockFD, tmTag, idTag);
+  m_lpTCPThread->doLogoutForUDP(nTCPSockFD, nDBCameraID, tmTag, idTag);
 }
 
 void CApp::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
@@ -275,18 +275,17 @@ void CApp::doCheckTimeout()
 }
 //
 // 创建房间 => 通过房间号进行创建...
-CRoom * CApp::doCreateRoom(int inRoomID, int inLiveID)
+CRoom * CApp::doCreateRoom(int inRoomID)
 {
-  // 如果找到了房间对象，更新直播通道...
+  // 如果找到了房间对象，直接返回...
   CRoom * lpRoom = NULL;
   GM_MapRoom::iterator itorRoom = m_MapRoom.find(inRoomID);
   if( itorRoom != m_MapRoom.end() ) {
     lpRoom = itorRoom->second;
-    lpRoom->SetLiveID(inLiveID);
     return lpRoom;
   }
   // 如果没有找到房间，创建一个新的房间...
-  lpRoom = new CRoom(inRoomID, inLiveID);
+  lpRoom = new CRoom(inRoomID);
   m_MapRoom[inRoomID] = lpRoom;
   return lpRoom;
 }

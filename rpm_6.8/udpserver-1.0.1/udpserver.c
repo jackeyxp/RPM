@@ -3,7 +3,7 @@
 #include "bmem.h"
 
 // STL must use g++...
-// g++ -g udpserver.c bmem.c thread.cpp app.cpp tcproom.cpp tcpclient.cpp tcpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
+// g++ -g udpserver.c bmem.c thread.cpp app.cpp tcpcamera.cpp tcproom.cpp tcpclient.cpp tcpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
 // valgrind --tool=memcheck --leak-check=full --show-reachable=yes ./udpserver
 
 CApp theApp;
@@ -214,10 +214,16 @@ const char * get_command_name(int inCmd)
 {
   switch(inCmd)
   {
-    case kCmd_Student_Login:            return "Student_Login";
-    case kCmd_Student_OnLine:           return "Student_OnLine";
-    case kCmd_Teacher_Login:            return "Teacher_Login";
-    case kCmd_Teacher_OnLine:           return "Teacher_OnLine";
+    case kCmd_Student_Login:        return "Student_Login";
+    case kCmd_Student_OnLine:       return "Student_OnLine";
+    case kCmd_Teacher_Login:        return "Teacher_Login";
+    case kCmd_Teacher_OnLine:       return "Teacher_OnLine";
+    case kCmd_UDP_Logout:           return "UDP_Logout";
+    case kCmd_Camera_PullStart:     return "Camera_PullStart";
+    case kCmd_Camera_PullStop:      return "Camera_PullStop";
+    case kCmd_Camera_OnLineList:    return "Camera_OnLineList";
+    case kCmd_Camera_LiveStart:     return "Camera_LiveStart";
+    case kCmd_Camera_LiveStop:      return "Camera_LiveStop";
   }
   return "unknown";
 }

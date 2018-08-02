@@ -85,9 +85,11 @@ const char * get_command_name(int inCmd);
 //////////////////////////////////////////////////////////////////////////
 class CTCPRoom;
 class CTCPClient;
-typedef map<int, CTCPRoom*>     GM_MapTCPRoom;  // RoomID   => CTCPRoom*
-typedef map<int, CTCPClient*>   GM_MapTCPConn;  // connfd   => CTCPClient*
-typedef map<string, string>     GM_MapJson;     // key      => value => JSON map object...
+class CTCPCamera;
+typedef map<int, CTCPCamera*>   GM_MapTCPCamera;  // DBCameraID => CTCPCamera*
+typedef map<int, CTCPRoom*>     GM_MapTCPRoom;    // RoomID     => CTCPRoom*
+typedef map<int, CTCPClient*>   GM_MapTCPConn;    // connfd     => CTCPClient*
+typedef map<string, string>     GM_MapJson;       // key        => value => JSON map object...
 
 // define client type...
 enum {
@@ -103,6 +105,11 @@ enum {
   kCmd_Teacher_Login      = 3,
   kCmd_Teacher_OnLine     = 4,
   kCmd_UDP_Logout         = 5,
+	kCmd_Camera_PullStart   = 6,
+	kCmd_Camera_PullStop    = 7,
+	kCmd_Camera_OnLineList  = 8,
+	kCmd_Camera_LiveStart   = 9,
+	kCmd_Camera_LiveStop    = 10,
 };
 
 // define the command header...

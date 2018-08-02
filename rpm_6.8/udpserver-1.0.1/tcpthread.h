@@ -13,11 +13,12 @@ public:
   virtual void Entry();
 public:
   int         GetEpollFD() { return m_epoll_fd; }
+  GM_MapTCPConn & GetMapConnect() { return m_MapConnect; }
 public:
   bool        InitThread();                     // 初始化并启动线程...
   CTCPRoom *  doCreateRoom(int inRoomID);       // 创建或更新房间对象...
   void        doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag);
-  void        doLogoutForUDP(int nTCPSockFD, uint8_t tmTag, uint8_t idTag);
+  void        doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag);
 private:
   int     doCreateSocket(int nHostPort);    // 创建TCP监听套接字...
   int     SetNonBlocking(int sockfd);

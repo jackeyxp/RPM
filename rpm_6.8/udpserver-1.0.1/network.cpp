@@ -16,7 +16,7 @@ CNetwork::CNetwork(uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t i
 CNetwork::~CNetwork()
 {
   // 通过相互关联的TCP连接通知终端UDP连接退出了...
-  GetApp()->doLogoutForUDP(m_rtp_create.tcpSock, this->GetTmTag(), this->GetIdTag());
+  GetApp()->doLogoutForUDP(m_rtp_create.tcpSock, m_rtp_create.liveID, this->GetTmTag(), this->GetIdTag());
 }
 
 void CNetwork::ResetTimeout()

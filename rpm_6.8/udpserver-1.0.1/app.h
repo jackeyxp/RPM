@@ -22,10 +22,10 @@ public:
   void        doDelSupplyForTeacher(CTeacher * lpTeacher);
   bool        IsUDPTeacherPusherOnLine(int inRoomID);
   void        doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag);
-  void        doLogoutForUDP(int nTCPSockFD, uint8_t tmTag, uint8_t idTag);
+  void        doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag);
 public:
+  CRoom   *   doCreateRoom(int inRoomID);
   int         GetListenFD() { return m_listen_fd; }
-  CRoom   *   doCreateRoom(int inRoomID, int inLiveID);
 private:
   bool        doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr);
   void        doTagDelete(int nHostPort);

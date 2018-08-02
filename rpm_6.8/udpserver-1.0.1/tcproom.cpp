@@ -1,6 +1,7 @@
 
 #include "tcproom.h"
 #include "tcpclient.h"
+#include "tcpcamera.h"
 
 CTCPRoom::CTCPRoom(int inRoomID)
   : m_lpTCPTeacher(NULL)
@@ -11,7 +12,49 @@ CTCPRoom::CTCPRoom(int inRoomID)
 
 CTCPRoom::~CTCPRoom()
 {
-  
+  this->clearAllCamera();
+}
+
+// 删除房间里所有有效的摄像头对象...
+void CTCPRoom::clearAllCamera()
+{
+  GM_MapTCPCamera::iterator itorItem;
+  for(itorItem = m_MapTCPCamera.begin(); itorItem != m_MapTCPCamera.end(); ++itorItem) {
+    delete itorItem->second;
+  }
+  m_MapTCPCamera.clear();
+}
+
+// 创建摄像头 => 由房间来管理摄像头的生命周期...
+CTCPCamera * CTCPRoom::doCreateCamera(int nDBCameraID, int nTCPSockFD, string & strCameraName, string & strPCName)
+{
+  // 如果找到了摄像头对象，更新数据...
+  CTCPCamera * lpTCPCamera = NULL;
+  GM_MapTCPCamera::iterator itorItem = m_MapTCPCamera.find(nDBCameraID);
+  if( itorItem != m_MapTCPCamera.end() ) {
+    lpTCPCamera = itorItem->second;
+    lpTCPCamera->SetRoomID(m_nRoomID);
+    lpTCPCamera->SetDBCameraID(nDBCameraID);
+    lpTCPCamera->SetTCPSockFD(nTCPSockFD);
+    lpTCPCamera->SetPCName(strPCName);
+    lpTCPCamera->SetCameraName(strCameraName);
+    return lpTCPCamera;
+  }
+  // 如果没有找到摄像头对象，创建一个新的对象...
+  lpTCPCamera = new CTCPCamera(m_nRoomID, nDBCameraID, nTCPSockFD, strCameraName, strPCName);
+  m_MapTCPCamera[nDBCameraID] = lpTCPCamera;
+  return lpTCPCamera;
+}
+
+// 删除摄像头 => 学生端发起的停止命令...
+void CTCPRoom::doDeleteCamera(int nDBCameraID)
+{
+  // 如果找到了摄像头对象，直接删除之...
+  GM_MapTCPCamera::iterator itorItem = m_MapTCPCamera.find(nDBCameraID);
+  if (itorItem != m_MapTCPCamera.end()) {
+    delete itorItem->second;
+    m_MapTCPCamera.erase(itorItem);
+  }
 }
 
 // 一个房间可以有多个学生观看端...
@@ -26,12 +69,26 @@ void CTCPRoom::doCreateStudent(CTCPClient * lpStudent)
   m_MapTCPStudent[nConnFD] = lpStudent;
 }
 
+// 注意：这里还需要删除与这个学生端相关的在线摄像头对象...
 void CTCPRoom::doDeleteStudent(CTCPClient * lpStudent)
 {
-  // 在学生观看端中遍历查找...
+  // 先获取套接字号码，用来查找学生端和摄像头...
   int nConnFD = lpStudent->GetConnFD();
-  GM_MapTCPConn::iterator itorItem = m_MapTCPStudent.find(nConnFD);
+  // 遍历房间里的摄像头列表，通过套接字进行匹配...
+  CTCPCamera * lpTCPCamera = NULL;
+  GM_MapTCPCamera::iterator itorCamera = m_MapTCPCamera.begin();
+  while(itorCamera != m_MapTCPCamera.end()) {
+    lpTCPCamera = itorCamera->second;
+    // 如果摄像头的套接字与当前学生端的套接字不一致，继续下一个...
+    if( lpTCPCamera->GetTCPSockFD() != nConnFD) {
+      ++itorCamera; continue;
+    }
+    // 套接字是一致的，删除摄像头，列表中删除...
+    delete lpTCPCamera; lpTCPCamera = NULL;
+    m_MapTCPCamera.erase(itorCamera++);
+  }
   // 找到相关观看学生端对象，直接删除返回...
+  GM_MapTCPConn::iterator itorItem = m_MapTCPStudent.find(nConnFD);
   if( itorItem != m_MapTCPStudent.end() ) {
     m_MapTCPStudent.erase(itorItem);
     return;

@@ -4,12 +4,11 @@
 #include "student.h"
 #include "teacher.h"
 
-CRoom::CRoom(int inRoomID, int inLiveID)
+CRoom::CRoom(int inRoomID)
   : m_lpStudentPusher(NULL)
   , m_lpTeacherPusher(NULL)
   , m_lpTeacherLooker(NULL)
   , m_nRoomID(inRoomID)
-  , m_nLiveID(inLiveID)
 {
   
 }
@@ -21,7 +20,7 @@ CRoom::~CRoom()
 
 void CRoom::doDumpRoomInfo()
 {
-  log_trace("\n======== RoomID: %d, LiveID: %d ========\n Student-Pusher: %d, Teacher-Looker: %d\n Teacher-Pusher: %d, Student-Looker: %d", m_nRoomID, m_nLiveID,
+  log_trace("\n======== RoomID: %d ========\n Student-Pusher: %d, Teacher-Looker: %d\n Teacher-Pusher: %d, Student-Looker: %d", m_nRoomID, 
             ((m_lpStudentPusher != NULL) ? 1 : 0), ((m_lpTeacherLooker != NULL) ? 1 : 0), ((m_lpTeacherPusher != NULL) ? 1 : 0), m_MapStudentLooker.size());
 }
 //

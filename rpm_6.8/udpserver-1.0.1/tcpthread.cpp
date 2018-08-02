@@ -32,8 +32,8 @@ CTCPThread::~CTCPThread()
   pthread_mutex_destroy(&m_mutex);  
 }
 
-// 响应UDP终端退出时的时间转发通知...
-void CTCPThread::doLogoutForUDP(int nTCPSockFD, uint8_t tmTag, uint8_t idTag)
+// 响应UDP终端退出时的事件转发通知...
+void CTCPThread::doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag)
 {
   // 进入线程互斥保护...
   pthread_mutex_lock(&m_mutex);
@@ -44,7 +44,7 @@ void CTCPThread::doLogoutForUDP(int nTCPSockFD, uint8_t tmTag, uint8_t idTag)
     if( itorItem == m_MapConnect.end() )
       break;
     lpTCPClient = itorItem->second;
-    lpTCPClient->doLogoutForUDP(tmTag, idTag);
+    lpTCPClient->doLogoutForUDP(nDBCameraID, tmTag, idTag);
   } while( false );
   // 退出线程互斥保护...
   pthread_mutex_unlock(&m_mutex);  

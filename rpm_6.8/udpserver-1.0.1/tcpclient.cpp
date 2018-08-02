@@ -3,6 +3,7 @@
 #include "tcproom.h"
 #include "tcpclient.h"
 #include "tcpthread.h"
+#include "tcpcamera.h"
 #include <json/json.h>
 
 #define MAX_PATH_SIZE           260
@@ -149,23 +150,55 @@ int CTCPClient::doStudentClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
   {
     case kCmd_Student_Login:      nResult = this->doCmdStudentLogin(); break;
     case kCmd_Student_OnLine:     nResult = this->doCmdStudentOnLine(); break;
+    case kCmd_Camera_PullStart:   nResult = this->doCmdCameraPullStart(); break;
+    case kCmd_Camera_PullStop:    nResult = this->doCmdCameraPullStop(); break;
   }
-  return nResult;
+  // 默认全部返回正确...
+  return 0;
+}
+
+// 处理Student发送的通道拉流开启命令...
+int CTCPClient::doCmdCameraPullStart()
+{
+  // 判断传递JSON数据有效性...
+  if( m_MapJson.find("camera_id") == m_MapJson.end() ||
+    m_MapJson.find("camera_name") == m_MapJson.end() ) {
+    return -1;
+  }
+  // 获取通道编号和名称，将通道存放到学生端所在房间当中...
+  string & strCameraName = m_MapJson["camera_name"];
+  int nDBCameraID = atoi(m_MapJson["camera_id"].c_str());
+  m_lpTCPRoom->doCreateCamera(nDBCameraID, m_nConnFD, strCameraName, m_strPCName);
+  return 0;
+}
+
+// 处理Student发送的通道拉流停止命令...
+int CTCPClient::doCmdCameraPullStop()
+{
+  // 判断传递JSON数据有效性...
+  if( m_MapJson.find("camera_id") == m_MapJson.end() )
+    return -1;
+  // 获取通道编号，用通道编号删除摄像头对象...
+  int nDBCameraID = atoi(m_MapJson["camera_id"].c_str());
+  m_lpTCPRoom->doDeleteCamera(nDBCameraID);
+  return 0;
 }
 
 // 处理Student登录事件...
 int CTCPClient::doCmdStudentLogin()
 {
-  // 处理采集端登录过程 => 判断传递JSON数据有效性...
+  // 处理学生端登录过程 => 判断传递JSON数据有效性...
   if( m_MapJson.find("mac_addr") == m_MapJson.end() ||
     m_MapJson.find("ip_addr") == m_MapJson.end() ||
-    m_MapJson.find("room_id") == m_MapJson.end() ) {
+    m_MapJson.find("room_id") == m_MapJson.end() ||
+    m_MapJson.find("pc_name") == m_MapJson.end() ) {
     return -1;
   }
   // 保存解析到的有效JSON数据项...
   m_strMacAddr = m_MapJson["mac_addr"];
   m_strIPAddr  = m_MapJson["ip_addr"];
   m_strRoomID  = m_MapJson["room_id"];
+  m_strPCName  = m_MapJson["pc_name"];
   m_nRoomID = atoi(m_strRoomID.c_str());
   // 创建或更新房间，更新房间里的学生端...
   m_lpTCPRoom = m_lpTCPThread->doCreateRoom(m_nRoomID);
@@ -180,36 +213,18 @@ int CTCPClient::doCmdStudentLogin()
 int CTCPClient::doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine)
 {
   // 构造转发JSON数据块 => 返回套接字|TCP讲师|UDP讲师...
-  char szSendBuf[MAX_PATH_SIZE] = {0};
   json_object * new_obj = json_object_new_object();
   json_object_object_add(new_obj, "tcp_socket", json_object_new_int(m_nConnFD));
   json_object_object_add(new_obj, "tcp_teacher", json_object_new_int(bIsTCPOnLine));
   json_object_object_add(new_obj, "udp_teacher", json_object_new_int(bIsUDPOnLine));
   // 转换成json字符串，获取字符串长度...
   char * lpNewJson = (char*)json_object_to_json_string(new_obj);
-  int nBodyLen = strlen(lpNewJson);
-  // 构造回复结构头信息...
-  Cmd_Header theHeader = {0};
-  theHeader.m_type = m_nClientType;
-  theHeader.m_cmd  = kCmd_Student_Login;
-  theHeader.m_pkg_len = nBodyLen;
-  memcpy(szSendBuf, &theHeader, sizeof(theHeader));
-  memcpy(szSendBuf+sizeof(theHeader), lpNewJson, nBodyLen);
-  // 向学生端对象发送组合后的数据包...
-  m_strSend.assign(szSendBuf, nBodyLen+sizeof(theHeader));
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendCommonCmd(kCmd_Student_Login, lpNewJson, strlen(lpNewJson));
   // json对象引用计数减少...
   json_object_put(new_obj);
-  // 向学生端对象发起发送数据事件...
-  epoll_event evClient = {0};
-  evClient.data.fd = m_nConnFD;
-  evClient.events = EPOLLOUT | EPOLLET;
-  // 重新修改事件，加入写入事件...
-  if( epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, m_nConnFD, &evClient) < 0 ) {
-    log_trace("mod socket '%d' to epoll failed: %s", m_nConnFD, strerror(errno));
-    return -1;
-  }
-  // 返回执行正确...
-  return 0;
+  // 返回执行结果...
+  return nResult;
 }
 
 void CTCPClient::doUDPTeacherPusherOnLine(bool bIsOnLineFlag)
@@ -225,35 +240,19 @@ void CTCPClient::doUDPTeacherPusherOnLine(bool bIsOnLineFlag)
 }
 
 // 将相关联的UDP终端退出的事件转发给TCP终端连接对象...
-void CTCPClient::doLogoutForUDP(uint8_t tmTag, uint8_t idTag)
+void CTCPClient::doLogoutForUDP(int nDBCameraID, uint8_t tmTag, uint8_t idTag)
 {
   // 构造转发JSON数据块 => UDP的终端类型和身份类型 => tmTag | idTag...
-  char szSendBuf[MAX_PATH_SIZE] = {0};
   json_object * new_obj = json_object_new_object();
   json_object_object_add(new_obj, "tm_tag", json_object_new_int(tmTag));
   json_object_object_add(new_obj, "id_tag", json_object_new_int(idTag));
+  json_object_object_add(new_obj, "camera_id", json_object_new_int(nDBCameraID));
   // 转换成json字符串，获取字符串长度...
   char * lpNewJson = (char*)json_object_to_json_string(new_obj);
-  int nBodyLen = strlen(lpNewJson);
-  // 构造回复结构头信息...
-  Cmd_Header theHeader = {0};
-  theHeader.m_type = m_nClientType;
-  theHeader.m_cmd  = kCmd_UDP_Logout;
-  theHeader.m_pkg_len = nBodyLen;
-  memcpy(szSendBuf, &theHeader, sizeof(theHeader));
-  memcpy(szSendBuf+sizeof(theHeader), lpNewJson, nBodyLen);
-  // 向学生端对象发送组合后的数据包...
-  m_strSend.assign(szSendBuf, nBodyLen+sizeof(theHeader));
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendCommonCmd(kCmd_UDP_Logout, lpNewJson, strlen(lpNewJson));
   // json对象引用计数减少...
   json_object_put(new_obj);
-  // 向学生端对象发起发送数据事件...
-  epoll_event evClient = {0};
-  evClient.data.fd = m_nConnFD;
-  evClient.events = EPOLLOUT | EPOLLET;
-  // 重新修改事件，加入写入事件...
-  if( epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, m_nConnFD, &evClient) < 0 ) {
-    log_trace("mod socket '%d' to epoll failed: %s", m_nConnFD, strerror(errno));
-  }
 }
 
 int CTCPClient::doCmdStudentOnLine()
@@ -267,16 +266,95 @@ int CTCPClient::doTeacherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
   int nResult = -1;
   switch(lpHeader->m_cmd)
   {
-    case kCmd_Teacher_Login:        nResult = this->doCmdTeacherLogin(); break;
-    case kCmd_Teacher_OnLine:       nResult = this->doCmdTeacherOnLine(); break;
+    case kCmd_Teacher_Login:      nResult = this->doCmdTeacherLogin(); break;
+    case kCmd_Teacher_OnLine:     nResult = this->doCmdTeacherOnLine(); break;
+    case kCmd_Camera_LiveStart:   nResult = this->doCmdTeacherCameraLiveStart(); break;
+    case kCmd_Camera_OnLineList:  nResult = this->doCmdTeacherCameraOnLineList(); break;
   }
+  // 默认全部返回正确...
   return 0;
+}
+
+// 处理Teacher发起学生端摄像头推流事件通知...
+int CTCPClient::doCmdTeacherCameraLiveStart()
+{
+  // 解析命令数据，判断传递JSON数据有效性...
+  if( m_MapJson.find("camera_id") == m_MapJson.end() )
+    return -1;
+  // 将JSON转换成int数字 => 只需要摄像头通道编号...
+  int nDBCameraID = atoi(m_MapJson["camera_id"].c_str());
+  // 在房间中查找对应的摄像头对象 => 通过摄像头数据库编号...
+  GM_MapTCPCamera & theMapCamera = m_lpTCPRoom->GetMapCamera();
+  GM_MapTCPCamera::iterator itorItem = theMapCamera.find(nDBCameraID);
+  // 如果没有找到，直接返回...
+  if( itorItem == theMapCamera.end() )
+    return -1;
+  // 查找通道对应的学生端对象...
+  GM_MapTCPConn & theMapConn = m_lpTCPThread->GetMapConnect();
+  CTCPCamera * lpTCPCamera = itorItem->second;
+  int nTCPSockFD = lpTCPCamera->GetTCPSockFD();
+  GM_MapTCPConn::iterator itorConn = theMapConn.find(nTCPSockFD);
+  // 如果没有找到，直接返回...
+  if( itorConn == theMapConn.end() )
+    return -1;
+  // 对这个找到的学生端进行身份验证...
+  CTCPClient * lpStudent = itorConn->second;
+  if( lpStudent->GetClientType() != kClientStudent )
+    return -1;
+  // 转发开始推流命令到这个学生端...
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "camera_id", json_object_new_int(nDBCameraID));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数 => 注意：必须是对应的学生端的对象...
+  int nResult = lpStudent->doSendCommonCmd(kCmd_Camera_LiveStart, lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+// 处理Teacher获取房间里的在线摄像头列表...
+int CTCPClient::doCmdTeacherCameraOnLineList()
+{
+  // 获取当前房间里的在线摄像头通道列表集合...
+  GM_MapTCPCamera & theMapCamera = m_lpTCPRoom->GetMapCamera();
+  GM_MapTCPCamera::iterator itorItem;
+  CTCPCamera * lpTCPCamera = NULL;
+  // 构造转发JSON数据块 => 返回在线通道列表...
+  json_object * new_obj = json_object_new_object();
+  // 先计算在线摄像头总数，放入JSON数据包当中...
+  json_object_object_add(new_obj, "list_num", json_object_new_int(theMapCamera.size()));
+  // 在线摄像头数大于0，遍历摄像头通道列表集合，组合要返回的数据内容...
+  if( theMapCamera.size() > 0 ) {
+    json_object * new_array = json_object_new_array();
+    for(itorItem = theMapCamera.begin(); itorItem != theMapCamera.end(); ++itorItem) {
+      lpTCPCamera = itorItem->second;
+      // 每条数据内容 => room_id|camera_id|camera_name|pc_name
+      json_object * data_obj = json_object_new_object();
+      json_object_object_add(data_obj, "room_id", json_object_new_int(lpTCPCamera->GetRoomID()));
+      json_object_object_add(data_obj, "camera_id", json_object_new_int(lpTCPCamera->GetDBCameraID()));
+      json_object_object_add(data_obj, "pc_name", json_object_new_string(lpTCPCamera->GetPCName().c_str()));
+      json_object_object_add(data_obj, "camera_name", json_object_new_string(lpTCPCamera->GetCameraName().c_str()));
+      json_object_array_add(new_array, data_obj);
+    }
+    // 将数组放入核心对象当中...
+    json_object_object_add(new_obj, "list_data", new_array);
+  }
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendCommonCmd(kCmd_Camera_OnLineList, lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
 }
 
 // 处理Teacher登录事件...
 int CTCPClient::doCmdTeacherLogin()
 {
-  // 处理采集端登录过程 => 判断传递JSON数据有效性...
+  // 处理学生端登录过程 => 判断传递JSON数据有效性...
   if( m_MapJson.find("mac_addr") == m_MapJson.end() ||
     m_MapJson.find("ip_addr") == m_MapJson.end() ||
     m_MapJson.find("room_id") == m_MapJson.end() ) {
@@ -291,24 +369,44 @@ int CTCPClient::doCmdTeacherLogin()
   m_lpTCPRoom = m_lpTCPThread->doCreateRoom(m_nRoomID);
   m_lpTCPRoom->doCreateTeacher(this);
   // 构造转发JSON数据块 => 返回TCP套接字...
-  char szSendBuf[MAX_PATH_SIZE] = {0};
   json_object * new_obj = json_object_new_object();
   json_object_object_add(new_obj, "tcp_socket", json_object_new_int(m_nConnFD));
   // 转换成json字符串，获取字符串长度...
   char * lpNewJson = (char*)json_object_to_json_string(new_obj);
-  int nBodyLen = strlen(lpNewJson);
-  // 构造回复结构头信息...
-  Cmd_Header theHeader = {0};
-  theHeader.m_type = m_nClientType;
-  theHeader.m_cmd  = kCmd_Teacher_Login;
-  theHeader.m_pkg_len = nBodyLen;
-  memcpy(szSendBuf, &theHeader, sizeof(theHeader));
-  memcpy(szSendBuf+sizeof(theHeader), lpNewJson, nBodyLen);
-  // 向学生端对象发送组合后的数据包...
-  m_strSend.assign(szSendBuf, nBodyLen+sizeof(theHeader));
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendCommonCmd(kCmd_Teacher_Login, lpNewJson, strlen(lpNewJson));
   // json对象引用计数减少...
   json_object_put(new_obj);
-  // 向学生端对象发起发送数据事件...
+  // 返回执行结果...
+  return nResult;
+}
+
+// 处理Teacher在线汇报命令...
+int CTCPClient::doCmdTeacherOnLine()
+{
+  return 0;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// 注意：目前这种通过m_strSend中转发送缓存，存在一定的风险，多个线程同时发送可能就会发生命令丢失的问题...
+// 注意：判断的标准是m_strSend是否为空，不为空，说明数据还没有被发走，因此，这里需要改进，改动比较大...
+// 注意：epoll_event.data 是union类型，里面的4个变量不能同时使用，只能使用一个，目前我们用的是fd
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// 统一的通用命令发送接口函数...
+int CTCPClient::doSendCommonCmd(int nCmdID, const char * lpJsonPtr/* = NULL*/, int nJsonSize/* = 0*/)
+{
+  // 构造回复结构头信息...
+  Cmd_Header theHeader = {0};
+  theHeader.m_pkg_len = ((lpJsonPtr != NULL) ? nJsonSize : 0);
+  theHeader.m_type = m_nClientType;
+  theHeader.m_cmd  = nCmdID;
+  // 先填充名头头结构数据内容 => 注意是assign重建字符串...
+  m_strSend.assign((char*)&theHeader, sizeof(theHeader));
+  // 如果传入的数据内容有效，才进行数据的填充...
+  if( lpJsonPtr != NULL && nJsonSize > 0 ) {
+    m_strSend.append(lpJsonPtr, nJsonSize);
+  }
+  // 向当前终端对象发起发送数据事件...
   epoll_event evClient = {0};
   evClient.data.fd = m_nConnFD;
   evClient.events = EPOLLOUT | EPOLLET;
@@ -318,12 +416,6 @@ int CTCPClient::doCmdTeacherLogin()
     return -1;
   }
   // 返回执行正确...
-  return 0;
-}
-
-// 处理Teacher在线汇报命令...
-int CTCPClient::doCmdTeacherOnLine()
-{
   return 0;
 }
 //

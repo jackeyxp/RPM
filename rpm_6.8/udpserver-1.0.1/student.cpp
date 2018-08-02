@@ -78,7 +78,7 @@ bool CStudent::doTagCreate(char * lpBuffer, int inBufSize)
   CApp * lpApp = GetApp();
   // 更新创建命令包内容，创建或更新房间，更新房间里的学生端...
   memcpy(&m_rtp_create, lpBuffer, sizeof(m_rtp_create));
-  m_lpRoom = lpApp->doCreateRoom(m_rtp_create.roomID, m_rtp_create.liveID);
+  m_lpRoom = lpApp->doCreateRoom(m_rtp_create.roomID);
   m_lpRoom->doCreateStudent(this);
   // 回复学生推流端 => 房间已经创建成功，不要再发创建命令了...
   if( this->GetIdTag() == ID_TAG_PUSHER ) {
