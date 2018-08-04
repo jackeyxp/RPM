@@ -163,12 +163,19 @@ int CTCPClient::doCmdCameraPullStart()
 {
   // 判断传递JSON数据有效性...
   if( m_MapJson.find("camera_id") == m_MapJson.end() ||
-    m_MapJson.find("camera_name") == m_MapJson.end() ) {
+    m_MapJson.find("camera_name") == m_MapJson.end() ||
+    m_MapJson.find("room_id") == m_MapJson.end() ) {
     return -1;
   }
   // 获取通道编号和名称，将通道存放到学生端所在房间当中...
   string & strCameraName = m_MapJson["camera_name"];
+  int nDBRoomID = atoi(m_MapJson["room_id"].c_str());
   int nDBCameraID = atoi(m_MapJson["camera_id"].c_str());
+  // 如果当前房间对象为空，用房间号创建一个...
+  if( m_lpTCPRoom == NULL ) {
+    m_lpTCPRoom = m_lpTCPThread->doCreateRoom(nDBRoomID);
+  }
+  // 在房间对象中执行创建摄像头通道对象的命令...
   m_lpTCPRoom->doCreateCamera(nDBCameraID, m_nConnFD, strCameraName, m_strPCName);
   return 0;
 }
