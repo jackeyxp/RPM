@@ -21,6 +21,7 @@ public:
   void         doCreateTeacher(CTCPClient * lpTeacher);
   void         doDeleteTeacher(CTCPClient * lpTeacher);
   void         doUDPTeacherPusherOnLine(bool bIsOnLineFlag);
+  void         doUDPStudentPusherOnLine(int inDBCameraID, bool bIsOnLineFlag);
 private:
   void         clearAllCamera();
 private:

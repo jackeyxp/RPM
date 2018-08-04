@@ -30,6 +30,12 @@ void CRoom::doCreateStudent(CStudent * lpStudent)
   int nHostPort = lpStudent->GetHostPort();
   uint8_t idTag = lpStudent->GetIdTag();
   if( idTag == ID_TAG_PUSHER ) {
+    // 如果新的学生推流对象与原有对象不相同(可能多次发命令) => 告诉房间里的TCP讲师端，可以创建拉流线程了...
+    if( m_lpStudentPusher != lpStudent ) {
+      m_lpStudentPusher = lpStudent;
+      GetApp()->doUDPStudentPusherOnLine(m_nRoomID, lpStudent->GetDBCameraID(), true);
+    }
+    // 将新的学生推流对象保存起来...
     m_lpStudentPusher = lpStudent;
   } else if( idTag == ID_TAG_LOOKER ) {
     m_MapStudentLooker[nHostPort] = lpStudent;
@@ -42,8 +48,9 @@ void CRoom::doDeleteStudent(CStudent * lpStudent)
   // 如果输入的学生端对象无效，直接返回...
   if( lpStudent == NULL )
     return;
-  // 进行指针比较，如果是学生推流端，置空，返回...
+  // 如果是学生推流端 => 告诉房间里的TCP讲师端，可以删除拉流线程了...
   if( lpStudent == m_lpStudentPusher ) {
+    GetApp()->doUDPStudentPusherOnLine(m_nRoomID, lpStudent->GetDBCameraID(), false);
     m_lpStudentPusher = NULL;
     return;
   }
@@ -73,7 +80,7 @@ void CRoom::doCreateTeacher(CTeacher * lpTeacher)
 {
   uint8_t idTag = lpTeacher->GetIdTag();
   if( idTag == ID_TAG_PUSHER ) {
-    // 如果新的讲师推流对象与原有对象不相同 => 告诉所有TCP在线学生端，可以创建拉流线程了...
+    // 如果新的讲师推流对象与原有对象不相同(可能多次发命令) => 告诉所有TCP在线学生端，可以创建拉流线程了...
     if( m_lpTeacherPusher != lpTeacher ) {
       m_lpTeacherPusher = lpTeacher;
       GetApp()->doUDPTeacherPusherOnLine(m_nRoomID, true);

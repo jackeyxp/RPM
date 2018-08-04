@@ -16,6 +16,7 @@ public:
   uint32_t      GetHostAddr() { return m_nHostAddr; }
   uint16_t      GetHostPort() { return m_nHostPort; }
   string    &   GetSeqHeader() { return m_strSeqHeader; }
+  int           GetDBCameraID() { return m_rtp_create.liveID; }
   bool          doProcess(uint8_t ptTag, char * lpBuffer, int inBufSize);
 public:
   virtual bool  doServerSendDetect() = 0;

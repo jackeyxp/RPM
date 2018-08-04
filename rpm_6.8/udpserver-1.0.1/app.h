@@ -21,7 +21,9 @@ public:
   void        doAddSupplyForTeacher(CTeacher * lpTeacher);
   void        doDelSupplyForTeacher(CTeacher * lpTeacher);
   bool        IsUDPTeacherPusherOnLine(int inRoomID);
+  bool        IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID);
   void        doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag);
+  void        doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag);
   void        doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag);
 public:
   CRoom   *   doCreateRoom(int inRoomID);

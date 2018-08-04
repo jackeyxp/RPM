@@ -53,11 +53,43 @@ void CApp::doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_
   m_lpTCPThread->doLogoutForUDP(nTCPSockFD, nDBCameraID, tmTag, idTag);
 }
 
+void CApp::doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag)
+{
+  if( m_lpTCPThread == NULL )
+    return;
+  m_lpTCPThread->doUDPStudentPusherOnLine(inRoomID, inDBCameraID, bIsOnLineFlag);
+}
+
 void CApp::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
 {
   if( m_lpTCPThread == NULL )
     return;
   m_lpTCPThread->doUDPTeacherPusherOnLine(inRoomID, bIsOnLineFlag);
+}
+
+bool CApp::IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID)
+{
+  // 首先进行线程互斥...
+  pthread_mutex_lock(&m_mutex);
+  bool bOnLine = false;
+  CRoom * lpRoom = NULL;
+  CStudent * lpStudent = NULL;
+  GM_MapRoom::iterator itorRoom;
+  do {
+    itorRoom = m_MapRoom.find(inRoomID);
+    if( itorRoom == m_MapRoom.end() )
+      break;
+    lpRoom = itorRoom->second; assert(lpRoom != NULL);
+    lpStudent = lpRoom->GetStudentPusher();
+    // 房间里没有学生推流者...
+    if( lpStudent == NULL )
+      break;
+    // 检测学生推流者的通道编号是否与输入的通道编号一致...
+    bOnLine = ((lpStudent->GetDBCameraID() == inDBCameraID) ? true : false);
+  } while( false );
+  // 退出互斥，返回查找结果...
+  pthread_mutex_unlock(&m_mutex);  
+  return bOnLine;  
 }
 
 bool CApp::IsUDPTeacherPusherOnLine(int inRoomID)

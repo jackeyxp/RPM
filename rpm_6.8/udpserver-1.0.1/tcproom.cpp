@@ -126,6 +126,15 @@ void CTCPRoom::doDeleteTeacher(CTCPClient * lpTeacher)
   }
 }
 
+// 告诉房间里在线的TCP讲师端 => 房间里的学生推流端上线或下线了...
+void CTCPRoom::doUDPStudentPusherOnLine(int inDBCameraID, bool bIsOnLineFlag)
+{
+  // 房间里没有老师存在，直接返回...
+  if( m_lpTCPTeacher == NULL )
+    return;
+  m_lpTCPTeacher->doUDPStudentPusherOnLine(inDBCameraID, bIsOnLineFlag);
+}
+
 // 告诉所有在线的TCP学生端 => 房间里的讲师推流端上线了...
 void CTCPRoom::doUDPTeacherPusherOnLine(bool bIsOnLineFlag)
 {

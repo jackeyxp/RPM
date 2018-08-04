@@ -50,6 +50,24 @@ void CTCPThread::doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, 
   pthread_mutex_unlock(&m_mutex);  
 }
 
+// 响应UDP学生推流端上线的事件通知 => 转发登录命令给房间里的在线讲师端...
+void CTCPThread::doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag)
+{
+  // 进入线程互斥保护...
+  pthread_mutex_lock(&m_mutex);
+  CTCPRoom * lpTCPRoom = NULL;
+  GM_MapTCPRoom::iterator itorRoom;
+  do {
+    itorRoom = m_MapTCPRoom.find(inRoomID);
+    if( itorRoom == m_MapTCPRoom.end() )
+      break;
+    lpTCPRoom = itorRoom->second; assert(lpTCPRoom != NULL);
+    lpTCPRoom->doUDPStudentPusherOnLine(inDBCameraID, bIsOnLineFlag);
+  } while( false );
+  // 退出线程互斥保护...
+  pthread_mutex_unlock(&m_mutex);    
+}
+
 // 响应UDP讲师推流端上线的事件通知 => 转发登录命令给所有在线学生端...
 void CTCPThread::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
 {
