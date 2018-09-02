@@ -1,18 +1,23 @@
 
-#include "tcpthread.h"
-#include "tcpclient.h"
+#include "app.h"
 #include "tcproom.h"
+#include "tcpclient.h"
+#include "tcpthread.h"
+#include "tcpcenter.h"
 
 #define WAIT_TIME_OUT     10 * 1000   // 全局超时检测10秒...
 
 CTCPThread::CTCPThread()
-  : m_listen_fd(0)
+  : m_lpTCPCenter(NULL)
+  , m_listen_fd(0)
   , m_epoll_fd(0)
 {
   // 初始化线程互斥对象...
   pthread_mutex_init(&m_mutex, NULL);
   // 重置epoll事件队列列表...
   memset(m_events, 0, sizeof(epoll_event) * MAX_EPOLL_SIZE);
+  // 创建TCP中心套接字管理对象...
+  m_lpTCPCenter = new CTCPCenter(this);
 }
 
 CTCPThread::~CTCPThread()
@@ -23,6 +28,11 @@ CTCPThread::~CTCPThread()
   if( m_listen_fd > 0 ) {
     close(m_listen_fd);
     m_listen_fd = 0;
+  }
+  // 关闭TCP中心套接字对象...
+  if( m_lpTCPCenter != NULL ) {
+    delete m_lpTCPCenter;
+    m_lpTCPCenter = NULL;
   }
   // 删除所有的客户端连接...
   this->clearAllClient();
@@ -104,16 +114,20 @@ CTCPRoom * CTCPThread::doCreateRoom(int inRoomID)
 
 bool CTCPThread::InitThread()
 {
-  // 创建tcp服务器套接字...
-  if( this->doCreateSocket(DEF_TCP_PORT) < 0 )
+  // 创建TCP服务器监听套接字，并加入到epoll队列当中...
+  int nRemotePort = GetApp()->GetTcpPort();
+  if( this->doCreateListenSocket(nRemotePort) < 0 )
     return false;
+  // 注意：为了保证正常工作，失败之后，仍然继续运行...
+  // 创建连接UDP中心服务器的套接字，并加入到epoll队列当中...
+  m_lpTCPCenter->InitTCPCenter(m_epoll_fd);
   // 启动tcp服务器监听线程...
   this->Start();
   return true;
 }
-//
-// 创建TCP监听套接字...
-int CTCPThread::doCreateSocket(int nHostPort)
+
+// 创建TCP服务器监听套接字，并加入到epoll队列当中...
+int CTCPThread::doCreateListenSocket(int nHostPort)
 {
   // 创建TCP监听套接字...
 	int listen_fd = socket(AF_INET, SOCK_STREAM, 0); 
@@ -174,15 +188,18 @@ int CTCPThread::doCreateSocket(int nHostPort)
 		return -1;
 	}
   // create epoll handle, add socket to epoll events...
-  // EPOLLEF模式下，accept时必须用循环来接收链接，防止链接丢失...
+  m_epoll_fd = epoll_create(MAX_EPOLL_SIZE);
+  assert( m_epoll_fd > 0 );
+  // 注意：epoll写事件，只要投递就会触发，读事件则会等待底层激发...
+  // 加入epoll队列当中，只加入读取事件......
   struct epoll_event evListen = {0};
-	m_epoll_fd = epoll_create(MAX_EPOLL_SIZE);
-	evListen.data.fd = listen_fd;
-	evListen.events = EPOLLIN | EPOLLET;
-	if( epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, listen_fd, &evListen) < 0 ) {
+  evListen.data.fd = listen_fd;
+  evListen.events = EPOLLIN | EPOLLET;
+  // EPOLLEF模式下，accept时必须用循环来接收链接，防止链接丢失...
+  if( epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, listen_fd, &evListen) < 0 ) {
     log_trace("epoll set insertion error: fd=%d", listen_fd);
-		return -1;
-	}
+    return -1;
+  }
   // 返回已经绑定完毕的TCP套接字...
   m_listen_fd = listen_fd;
   return m_listen_fd;
@@ -276,8 +293,11 @@ void CTCPThread::Entry()
           // 退出线程互斥保护...
           pthread_mutex_unlock(&m_mutex);  
         }
-      } else {
-        // 进入线程互斥保护...
+      } else if( nCurEventFD == m_lpTCPCenter->GetConnFD() ) {
+        // 响应中心套接字事件的处理过程...
+        m_lpTCPCenter->doEpollEvent(m_events[n].events);
+     } else {
+        // 其它套接字，进入线程互斥保护...
         pthread_mutex_lock(&m_mutex);
         // 处理客户端socket事件...
         int nRetValue = -1;
@@ -286,7 +306,7 @@ void CTCPThread::Entry()
         } else if( m_events[n].events & EPOLLOUT ) {
           nRetValue = this->doHandleWrite(nCurEventFD);
         }
-        // 判断处理结果...
+        // 判断事件处理结果...
         if( nRetValue < 0 ) {
           // 处理失败，从epoll队列中删除...
           struct epoll_event evDelete = {0};
@@ -359,7 +379,7 @@ int CTCPThread::doHandleWrite(int connfd)
   GM_MapTCPConn::iterator itorConn = m_MapConnect.find(connfd);
   if( itorConn == m_MapConnect.end() ) {
     log_trace("can't find client connection(%d)", connfd);
-		return -1;
+    return -1;
   }
   // 获取对应的客户端对象，执行写入操作...
   CTCPClient * lpTCPClient = itorConn->second;
@@ -369,6 +389,10 @@ int CTCPThread::doHandleWrite(int connfd)
 // 处理epoll超时事件...
 void CTCPThread::doHandleTimeout()
 {
+  // 查看中心套接字的连接超时状态...
+  if( m_lpTCPCenter != NULL ) {
+    m_lpTCPCenter->doHandleTimeout();
+  }
   // 2017.07.26 - by jackey => 根据连接状态删除客户端...
   // 2017.12.16 - by jackey => 去掉gettcpstate，使用超时机制...
   // 遍历所有的连接，判断连接是否超时，超时直接删除...
@@ -394,4 +418,12 @@ void CTCPThread::doHandleTimeout()
       ++itorConn;
     }
   }  
+}
+
+int CTCPThread::doRoomCommand(int nCmdID, int nRoomID)
+{
+  if( m_lpTCPCenter == NULL )
+    return -1;
+  // 中心套接字有效，转发计数器变化通知...
+  return m_lpTCPCenter->doRoomCommand(nCmdID, nRoomID);
 }

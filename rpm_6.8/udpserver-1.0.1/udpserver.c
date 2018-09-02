@@ -2,10 +2,10 @@
 #include "app.h"
 #include "bmem.h"
 
-#include<sys/stat.h>
- 
+#include <sys/stat.h>
+
 // STL must use g++...
-// g++ -g udpserver.c bmem.c thread.cpp app.cpp tcpcamera.cpp tcproom.cpp tcpclient.cpp tcpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
+// g++ -g udpserver.c bmem.c thread.cpp app.cpp tcpcamera.cpp tcproom.cpp tcpcenter.cpp tcpclient.cpp tcpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
 // valgrind --tool=memcheck --leak-check=full --show-reachable=yes ./udpserver
 
 CApp theApp;
@@ -28,8 +28,11 @@ int main(int argc, char **argv)
   // 增大文件打开数量...
   if( !theApp.doInitRLimit() )
     return -1;
+  // 获取本机的外网地址...
+  if( !theApp.doInitWanAddr() )
+    return -1;
   // 创建udp服务器套接字...
-  if( theApp.doCreateSocket(DEF_UDP_PORT) < 0 )
+  if( theApp.doCreateUdpSocket() < 0 )
     return -1;
   // 启动超时检测线程对象...
   if( !theApp.doStartThread() )
@@ -235,9 +238,10 @@ const char * get_client_type(int inType)
 {
   switch(inType)
   {
-    case kClientPHP:     return "PHP";
-    case kClientStudent: return "Student";
-    case kClientTeacher: return "Teacher";
+    case kClientPHP:       return "PHP";
+    case kClientStudent:   return "Student";
+    case kClientTeacher:   return "Teacher";
+    case kClientUdpServer: return "UdpServer";
   }
   return "unknown";
 }
@@ -257,6 +261,13 @@ const char * get_command_name(int inCmd)
     case kCmd_Camera_OnLineList:    return "Camera_OnLineList";
     case kCmd_Camera_LiveStart:     return "Camera_LiveStart";
     case kCmd_Camera_LiveStop:      return "Camera_LiveStop";
+    case kCmd_UdpServer_Login:      return "UdpServer_Login";
+    case kCmd_UdpServer_OnLine:     return "UdpServer_OnLine";
+    case kCmd_UdpServer_AddTeacher: return "UdpServer_AddTeacher";
+    case kCmd_UdpServer_DelTeacher: return "UdpServer_DelTeacher";
+    case kCmd_UdpServer_AddStudent: return "UdpServer_AddStudent";
+    case kCmd_UdpServer_DelStudent: return "UdpServer_DelStudent";
+    case kCmd_PHP_GetUdpServer:     return "PHP_GetUdpServer";
   }
   return "unknown";
 }

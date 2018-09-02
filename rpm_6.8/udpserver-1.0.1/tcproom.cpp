@@ -1,13 +1,15 @@
 
+#include "app.h"
 #include "tcproom.h"
 #include "tcpclient.h"
 #include "tcpcamera.h"
+#include "tcpthread.h"
 
 CTCPRoom::CTCPRoom(int inRoomID)
   : m_lpTCPTeacher(NULL)
   , m_nRoomID(inRoomID)
 {
-  
+  assert(m_nRoomID > 0);
 }
 
 CTCPRoom::~CTCPRoom()
@@ -67,6 +69,8 @@ void CTCPRoom::doCreateStudent(CTCPClient * lpStudent)
     return;
   // 将学生观看到更新到观看列表...
   m_MapTCPStudent[nConnFD] = lpStudent;
+  // 获取TCP线程对象，转发计数器变化通知...
+  GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_AddStudent, m_nRoomID);
 }
 
 // 注意：这里还需要删除与这个学生端相关的在线摄像头对象...
@@ -91,6 +95,8 @@ void CTCPRoom::doDeleteStudent(CTCPClient * lpStudent)
   GM_MapTCPConn::iterator itorItem = m_MapTCPStudent.find(nConnFD);
   if( itorItem != m_MapTCPStudent.end() ) {
     m_MapTCPStudent.erase(itorItem);
+    // 获取TCP线程对象，转发计数器变化通知...
+    GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_DelStudent, m_nRoomID);
     return;
   }
   // 如果通过FD方式没有找到，通过指针遍历查找...
@@ -99,6 +105,8 @@ void CTCPRoom::doDeleteStudent(CTCPClient * lpStudent)
     // 找到了相关节点 => 删除节点，返回...
     if(itorItem->second == lpStudent) {
       m_MapTCPStudent.erase(itorItem);
+      // 获取TCP线程对象，转发计数器变化通知...
+      GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_DelStudent, m_nRoomID);
       return;
     }
   }
@@ -115,6 +123,8 @@ void CTCPRoom::doCreateTeacher(CTCPClient * lpTeacher)
     return;
   // 保存讲师端连接对象...
   m_lpTCPTeacher = lpTeacher;
+  // 获取TCP线程对象，转发计数器变化通知...
+  GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_AddTeacher, m_nRoomID);
 }
 
 void CTCPRoom::doDeleteTeacher(CTCPClient * lpTeacher)
@@ -122,6 +132,8 @@ void CTCPRoom::doDeleteTeacher(CTCPClient * lpTeacher)
   // 如果是房间里的老师端，置空，返回...
   if( m_lpTCPTeacher == lpTeacher ) {
     m_lpTCPTeacher = NULL;
+    // 获取TCP线程对象，转发计数器变化通知...
+    GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_DelTeacher, m_nRoomID);
     return;
   }
 }

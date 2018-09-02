@@ -14,8 +14,9 @@ public:
 public:
   bool        doStartThread();
   bool        doInitRLimit();
+  bool        doInitWanAddr();
   void        doWaitSocket();
-  int         doCreateSocket(int nPort);
+  int         doCreateUdpSocket();
   void        doAddLoseForStudent(CStudent * lpStudent);
   void        doDelLoseForStudent(CStudent * lpStudent);
   void        doAddSupplyForTeacher(CTeacher * lpTeacher);
@@ -27,7 +28,13 @@ public:
   void        doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag);
 public:
   CRoom   *   doCreateRoom(int inRoomID);
+  CTCPThread* GetTCPThread() { return m_lpTCPThread; }
   int         GetListenFD() { return m_listen_fd; }
+  int         GetCenterPort() { return DEF_CENTER_PORT; }
+  const char* GetCenterAddr() { return DEF_CENTER_ADDR; }
+  string   &  GetWanAddr() { return m_strWanAddr; }
+  int         GetUdpPort() { return DEF_UDP_PORT; }
+  int         GetTcpPort() { return DEF_TCP_PORT; }
 private:
   bool        doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr);
   void        doTagDelete(int nHostPort);
@@ -37,6 +44,7 @@ private:
   int         doSendLose();
 private:
   int               m_listen_fd;      // UDP监听套接字...
+  string            m_strWanAddr;     // 本地外网地址...
   GM_MapRoom        m_MapRoom;        // 房间列表...
   GM_MapNetwork     m_MapNetwork;     // 网络对象列表...
   GM_ListTeacher    m_ListTeacher;    // 有补包的老师推流者列表...

@@ -4,6 +4,8 @@
 #include "student.h"
 #include "teacher.h"
 #include "tcpthread.h"
+#include <ifaddrs.h>
+#include <netdb.h>
 
 CApp::CApp()
   : m_listen_fd(0)
@@ -334,8 +336,60 @@ bool CApp::doInitRLimit()
   return true;
 }
 
-int CApp::doCreateSocket(int nPort)
+// 获取本机外网地址...
+bool CApp::doInitWanAddr()
 {
+  struct ifaddrs *ifaddr, *ifa;
+  char host_ip[NI_MAXHOST] = {0};
+  int family, result, is_ok = 0;
+  if( getifaddrs(&ifaddr) == -1) {
+    return false;
+  }
+  for( ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next ) { 
+    if( ifa->ifa_addr == NULL )
+      continue;
+    family = ifa->ifa_addr->sa_family;
+    if( family != AF_INET )
+      continue;
+    result = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host_ip, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+    if( result != 0 )
+      continue;
+    // 先排除本机的环路地址...
+    if( strcasecmp(host_ip, "127.0.0.1") == 0 )
+      continue;
+    // 将获取的IP地址进行转换判断...
+    uint32_t nHostAddr = ntohl(inet_addr(host_ip));
+    // 检查是否是以下三类内网地址...
+    // A类：10.0.0.0 ~ 10.255.255.255
+    // B类：172.16.0.0 ~ 172.31.255.255
+    // C类：192.168.0.0 ~ 192.168.255.255
+    if((nHostAddr >= 0x0A000000 && nHostAddr <= 0x0AFFFFFF) ||
+      (nHostAddr >= 0xAC100000 && nHostAddr <= 0xAC1FFFFF) ||
+      (nHostAddr >= 0xC0A80000 && nHostAddr <= 0xC0A8FFFF))
+      continue;
+    // 不是三类内网地址，说明找到了本机的外网地址...
+    is_ok = 1;
+    break;
+  }
+  // 释放资源，没有找到，直接返回...
+  freeifaddrs(ifaddr);
+  if( !is_ok ) {
+    return false;
+  }
+  // 如果汇报地址host_ip为空，打印错误，返回...
+  if( strlen(host_ip) <= 0 ) {
+    log_trace("Error: host_ip is empty ==");
+    return false;
+  }
+  // 保存外网地址...
+  m_strWanAddr = host_ip;
+  return true;
+}
+
+int CApp::doCreateUdpSocket()
+{
+  // 获取UDP监听端口配置...
+  int nUdpPort = this->GetUdpPort();
   // 创建UDP监听套接字...
 	int listen_fd = socket(AF_INET, SOCK_DGRAM, 0); 
   if( listen_fd < 0 ) {
@@ -374,11 +428,11 @@ int CApp::doCreateSocket(int nPort)
 	struct sockaddr_in udpAddr = {0};
 	bzero(&udpAddr, sizeof(udpAddr));
 	udpAddr.sin_family = AF_INET; 
-	udpAddr.sin_port = htons(nPort);
+	udpAddr.sin_port = htons(nUdpPort);
 	udpAddr.sin_addr.s_addr = htonl(INADDR_ANY);
   // 绑定监听端口...
 	if( bind(listen_fd, (struct sockaddr *)&udpAddr, sizeof(struct sockaddr)) == -1 ) {
-    log_trace("bind udp port: %d, error: %s", nPort, strerror(errno));
+    log_trace("bind udp port: %d, error: %s", nUdpPort, strerror(errno));
     close(listen_fd);
 		return -1;
 	}

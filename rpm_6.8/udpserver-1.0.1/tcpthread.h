@@ -4,6 +4,7 @@
 #include "global.h"
 #include "thread.h"
 
+class CTCPCenter;
 class CTCPRoom;
 class CTCPThread : public CThread
 {
@@ -17,20 +18,24 @@ public:
 public:
   bool        InitThread();                     // 初始化并启动线程...
   CTCPRoom *  doCreateRoom(int inRoomID);       // 创建或更新房间对象...
+  int         doRoomCommand(int nCmdID, int nRoomID);
   void        doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag);
   void        doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag);
   void        doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag);
 private:
-  int     doCreateSocket(int nHostPort);    // 创建TCP监听套接字...
+  int     doCreateListenSocket(int nHostPort);
   int     SetNonBlocking(int sockfd);
   int     doHandleWrite(int connfd);
   int     doHandleRead(int connfd);
+  int     doHandleCenterWrite();
+  int     doHandleCenterRead();
   void    doHandleTimeout();
   void    clearAllClient();
   void    clearAllRoom();
 private:
   int                 m_epoll_fd;           // epoll句柄编号...
   int                 m_listen_fd;          // TCP监听套接字...
+  CTCPCenter    *     m_lpTCPCenter;        // UDP中心连接...
   GM_MapTCPRoom       m_MapTCPRoom;         // 房间列表...
   GM_MapTCPConn	      m_MapConnect;         // the global map object...
   pthread_mutex_t     m_mutex;              // 线程互斥对象...
