@@ -1,6 +1,12 @@
 CentOS6.8版本 => 打包核心更新日志
 ==========================================
 
+2018.09.02
+==========================================
+1. udpcenter => 新增中心服务器，便于直播服务器集群；
+2. udpserver => 新增自动重连中心服务器，定期汇报信息；
+3. mysql => data/educate/ => wk_system 删除transmit_addr|transmit_addr，新增udpcenter_addr|udpcenter_port
+
 2018.07.02
 ==========================================
 1. mysql => data/haoyi/monitor => wk_system 新增 wan_enable|wan_map_addr字段；
