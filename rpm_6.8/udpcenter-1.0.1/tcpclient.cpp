@@ -24,7 +24,7 @@ CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nHostPort, stri
 CTCPClient::~CTCPClient()
 {
   // 打印终端退出信息...
-  log_debug("Client Delete: %s, From: %s:%d, Socket: %d", get_client_type(m_nClientType), 
+  log_trace("Client Delete: %s, From: %s:%d, Socket: %d", get_client_type(m_nClientType), 
             this->m_strSinAddr.c_str(), this->m_nHostPort, this->m_nConnFD);
   // 终端退出时，需要删除服务器对象...
   GetApp()->doDeleteUdpServer(m_nConnFD);
@@ -105,7 +105,7 @@ int CTCPClient::ForRead()
     }
     // 打印调试信息到控制台，播放器类型，命令名称，IP地址端口，套接字...
     // 调试模式 => 只打印，不存盘到日志文件...
-    log_debug("Client Command(%s - %s, From: %s:%d, Socket: %d)", 
+    log_trace("Client Command(%s - %s, From: %s:%d, Socket: %d)", 
               get_client_type(m_nClientType), get_command_name(lpCmdHeader->m_cmd),
               this->m_strSinAddr.c_str(), this->m_nHostPort, this->m_nConnFD);
     // 对数据进行用户类型分发...
@@ -223,7 +223,7 @@ int CTCPClient::doCmdUdpServerLogin()
     lpUdpServer->m_strUdpAddr = m_MapJson["udp_addr"];
     lpUdpServer->m_nUdpPort = atoi(m_MapJson["udp_port"].c_str());
     lpUdpServer->m_nRemotePort = atoi(m_MapJson["remote_port"].c_str());
-    log_debug("[UdpServer] UdpAddr => %s:%d, RemoteAddr => %s:%d",
+    log_trace("[UdpServer] UdpAddr => %s:%d, RemoteAddr => %s:%d",
               lpUdpServer->m_strUdpAddr.c_str(), lpUdpServer->m_nUdpPort,
               lpUdpServer->m_strRemoteAddr.c_str(), lpUdpServer->m_nRemotePort);
   }
