@@ -109,9 +109,12 @@ void CTCPRoom::doDeleteStudent(CTCPClient * lpStudent)
       GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_DelStudent, m_nRoomID);
       return;
     }
+    // 2018.09.12 - by jackey => 造成过严重问题...
+    // 如果没有找到相关节点 => 继续下一个...
+    ++itorItem;
   }
   // 通过指针遍历也没有找到，打印错误信息...
-  log_trace("Can't find TCP-Student, ConnFD: %d", nConnFD);
+  log_trace("Can't find TCP-Student in CTCPRoom, ConnFD: %d", nConnFD);
 }
 
 // 一个房间只有一个老师端...

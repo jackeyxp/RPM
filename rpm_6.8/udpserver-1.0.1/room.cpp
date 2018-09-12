@@ -70,9 +70,12 @@ void CRoom::doDeleteStudent(CStudent * lpStudent)
       m_MapStudentLooker.erase(itorItem);
       return;
     }
+    // 2018.09.12 - by jackey => 造成过严重问题...
+    // 没有找到相关节点 => 继续找下一个...
+    ++itorItem;
   }
   // 通过指针遍历也没有找到，打印错误信息...
-  log_trace("Can't find Student-Looker, HostPort: %d", nHostPort);
+  log_trace("Can't find UDP-Student in CRoom, HostPort: %d", nHostPort);
 }
 //
 // 根据传递过来的老师端类型，进行变量更新...
