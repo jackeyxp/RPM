@@ -504,7 +504,7 @@ void CTeacher::doTagAVPackProcess(char * lpBuffer, int inBufSize)
 	if( max_id > new_id ) {
 		// 如果最小序号大于丢包序号 => 打印错误，直接丢掉这个补充包...
 		if( min_id > new_id ) {
-			log_trace("[Teacher-Pusher] Supply Discard => Seq: %u, Min-Max: [%u, %u], Type: %d", new_id, min_id, max_id, pt_tag);
+			//log_trace("[Teacher-Pusher] Supply Discard => Seq: %u, Min-Max: [%u, %u], Type: %d", new_id, min_id, max_id, pt_tag);
 			return;
 		}
 		// 最小序号不能比丢包序号小...
@@ -514,7 +514,7 @@ void CTeacher::doTagAVPackProcess(char * lpBuffer, int inBufSize)
 		// 将获取的数据内容更新到指定位置...
 		circlebuf_place(&cur_circle, nPosition, lpBuffer, inBufSize);
 		// 打印补充包信息...
-		log_trace("[Teacher-Pusher] Supply Success => Seq: %u, Min-Max: [%u, %u], Type: %d", new_id, min_id, max_id, pt_tag);
+		//log_trace("[Teacher-Pusher] Supply Success => Seq: %u, Min-Max: [%u, %u], Type: %d", new_id, min_id, max_id, pt_tag);
 		return;
 	}
 	// 如果是其它未知包，打印信息...
@@ -535,7 +535,7 @@ void CTeacher::doEraseLoseSeq(uint8_t inPType, uint32_t inSeqID)
 	uint32_t nResendCount = rtpLose.resend_count;
 	theMapLose.erase(itorItem);
 	// 打印已收到的补包信息，还剩下的未补包个数...
-	log_trace("[Teacher-Pusher] Supply Erase => LoseSeq: %u, ResendCount: %u, LoseSize: %u, Type: %d", inSeqID, nResendCount, theMapLose.size(), inPType);
+	//log_trace("[Teacher-Pusher] Supply Erase => LoseSeq: %u, ResendCount: %u, LoseSize: %u, Type: %d", inSeqID, nResendCount, theMapLose.size(), inPType);
 }
 //
 // 给丢失数据包预留环形队列缓存空间...
@@ -567,7 +567,7 @@ void CTeacher::doFillLosePack(uint8_t inPType, uint32_t nStartLoseID, uint32_t n
 		rtpLose.resend_time = cur_time_ms + max(cur_rtt_var_ms, MAX_SLEEP_MS);
 		theMapLose[sup_id] = rtpLose;
 		// 打印已丢包信息，丢包队列长度...
-		log_trace("[Teacher-Pusher] Lose Seq: %u, LoseSize: %u, Type: %d", sup_id, theMapLose.size(), inPType);
+		//log_trace("[Teacher-Pusher] Lose Seq: %u, LoseSize: %u, Type: %d", sup_id, theMapLose.size(), inPType);
 		// 累加当前丢包序列号...
 		++sup_id;
 	}
@@ -638,7 +638,7 @@ int CTeacher::doSendSupplyCmd(bool bIsAudio)
 		rtp_lose_t & rtpLose = itorItem->second;
     // 如果要补的包号，比最小包号还要小，直接丢弃，已经过期了...
     if( rtpLose.lose_seq < min_id ) {
-      log_trace("[Teacher-Pusher] Supply Discard => LoseSeq: %u, MinSeq: %u, Audio: %d", rtpLose.lose_seq, min_id, bIsAudio);
+      //log_trace("[Teacher-Pusher] Supply Discard => LoseSeq: %u, MinSeq: %u, Audio: %d", rtpLose.lose_seq, min_id, bIsAudio);
       theMapLose.erase(itorItem++);
       continue;
     }
@@ -688,7 +688,7 @@ int CTeacher::doSendSupplyCmd(bool bIsAudio)
     return 0;
   }
 	// 打印已发送补包命令...
-	log_trace("[Teacher-Pusher] Supply Send => Dir: %d, Count: %d, Audio: %d", DT_TO_SERVER, rtpSupply.suSize/sizeof(uint32_t), bIsAudio);
+	//log_trace("[Teacher-Pusher] Supply Send => Dir: %d, Count: %d, Audio: %d", DT_TO_SERVER, rtpSupply.suSize/sizeof(uint32_t), bIsAudio);
   // 成功发送补包命令，返回1...
   return 1;
 }

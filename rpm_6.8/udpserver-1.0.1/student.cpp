@@ -221,7 +221,7 @@ bool CStudent::doTagSupply(char * lpBuffer, int inBufSize)
   // 把自己加入到丢包对象列表当中...
   GetApp()->doAddLoseForStudent(this);
   // 打印已收到补包命令...
-  log_trace("[Student-Looker] Supply Recv => Count: %d, Type: %d", rtpSupply.suSize / sizeof(int), rtpSupply.suType);
+  //log_trace("[Student-Looker] Supply Recv => Count: %d, Type: %d", rtpSupply.suSize / sizeof(int), rtpSupply.suType);
   return true;
 }
 
@@ -290,7 +290,7 @@ void CStudent::doSendLosePacket(bool bIsAudio)
   lpFrontHeader = (rtp_hdr_t*)szPacketBuffer;
   // 如果要补充的数据包序号比最小序号还要小 => 没有找到，直接返回...
   if( rtpLose.lose_seq < lpFrontHeader->seq ) {
-    log_trace("[Student-Looker] Supply Error => lose: %u, min: %u, Type: %d", rtpLose.lose_seq, lpFrontHeader->seq, rtpLose.lose_type);
+    //log_trace("[Student-Looker] Supply Error => lose: %u, min: %u, Type: %d", rtpLose.lose_seq, lpFrontHeader->seq, rtpLose.lose_type);
     return;
   }
   assert( rtpLose.lose_seq >= lpFrontHeader->seq );
@@ -311,7 +311,7 @@ void CStudent::doSendLosePacket(bool bIsAudio)
   lpSendHeader = (rtp_hdr_t*)szPacketBuffer;
   // 如果找到的序号位置不对 或 本身就是需要补的丢包...
   if((lpSendHeader->pt == PT_TAG_LOSE) || (lpSendHeader->seq != rtpLose.lose_seq)) {
-    log_trace("[Student-Looker] Supply Error => Seq: %u, Find: %u, Type: %d", rtpLose.lose_seq, lpSendHeader->seq, lpSendHeader->pt);
+    //log_trace("[Student-Looker] Supply Error => Seq: %u, Find: %u, Type: %d", rtpLose.lose_seq, lpSendHeader->seq, lpSendHeader->pt);
     return;
   }
   // 获取有效的数据区长度 => 包头 + 数据...
@@ -333,7 +333,7 @@ void CStudent::doSendLosePacket(bool bIsAudio)
     return;
   }
   // 打印已经发送补包信息...
-  log_trace("[Student-Looker Supply Send => Seq: %u, TS: %u, Slice: %d, Type: %d", lpSendHeader->seq, lpSendHeader->ts, lpSendHeader->psize, lpSendHeader->pt);
+  //log_trace("[Student-Looker Supply Send => Seq: %u, TS: %u, Slice: %d, Type: %d", lpSendHeader->seq, lpSendHeader->ts, lpSendHeader->psize, lpSendHeader->pt);
 }
 
 bool CStudent::doTagHeader(char * lpBuffer, int inBufSize)
