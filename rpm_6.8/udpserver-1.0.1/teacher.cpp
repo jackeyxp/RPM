@@ -442,6 +442,10 @@ void CTeacher::doTagAVPackProcess(char * lpBuffer, int inBufSize)
 	uint32_t new_id = lpNewHeader->seq;
 	uint32_t max_id = new_id;
 	uint32_t min_id = new_id;
+  // 打印讲师端发送数据的调试信息...
+	//log_debug("[Teacher-Pusher] Size: %d, Type: %d, Seq: %u, TS: %u, pst: %d, ped: %d, Slice: %d, Zero: %d", inBufSize,
+  //          lpNewHeader->pt, lpNewHeader->seq, lpNewHeader->ts, lpNewHeader->pst,
+  //          lpNewHeader->ped, lpNewHeader->psize, nZeroSize);
 	// 出现打包错误，丢掉错误包，打印错误信息...
 	if( inBufSize != nDataSize || nZeroSize < 0 ) {
 		log_trace("[Teacher-Pusher] Error => RecvLen: %d, DataSize: %d, ZeroSize: %d", inBufSize, nDataSize, nZeroSize);

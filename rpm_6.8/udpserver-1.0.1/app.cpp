@@ -455,7 +455,8 @@ void CApp::doWaitSocket()
     // 如果返回长度与输入长度一致 => 说明发送端数据越界 => 超过了系统实际处理长度...
     // 注意：出现这种情况，一定要排查发送端的问题 => 通常是序号越界造成的...
     /////////////////////////////////////////////////////////////////////////////////////
-    if( nRecvCount == MAX_BUFF_LEN ) {
+    int nMaxSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
+    if( nRecvCount > nMaxSize ) {
       log_debug("Error Packet Excessed");
       continue;
     }

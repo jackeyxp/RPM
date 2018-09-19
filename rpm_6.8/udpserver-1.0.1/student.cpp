@@ -461,6 +461,7 @@ bool CStudent::doTransferToStudentLooker(char * lpBuffer, int inBufSize)
     log_trace("sendto error(code:%d, %s)", errno, strerror(errno));
     return false;
   }
+  //log_debug("[Transfer] Size: %d", inBufSize);
   // ·¢ËÍ³É¹¦...
   return true; 
 }
