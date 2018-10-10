@@ -17,6 +17,8 @@ public:
   uint16_t      GetHostPort() { return m_nHostPort; }
   string    &   GetSeqHeader() { return m_strSeqHeader; }
   int           GetDBCameraID() { return m_rtp_create.liveID; }
+  void          SetDeleteByTCP() { m_bIsDeleteByTCP = true; }
+  bool          GetDeleteByTCP() { return m_bIsDeleteByTCP; }
   bool          doProcess(uint8_t ptTag, char * lpBuffer, int inBufSize);
 public:
   virtual bool  doServerSendDetect() = 0;
@@ -38,4 +40,5 @@ protected:
   rtp_create_t  m_rtp_create;       // 创建命令
   time_t        m_nStartTime;       // 超时检测起点
   string        m_strSeqHeader;     // 推流端上传的序列头命令包...
+  bool          m_bIsDeleteByTCP;   // 是否被TCP终端连接删除标志...
 };

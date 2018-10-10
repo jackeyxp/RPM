@@ -561,3 +561,39 @@ void CApp::doTagDelete(int nHostPort)
   delete lpNetwork; lpNetwork = NULL;
   m_MapNetwork.erase(itorItem++);  
 }
+
+// 处理由kCmd_Camera_LiveStop触发的删除事件...
+void CApp::doDeleteForCameraLiveStop(int inRoomID)
+{
+  // 首先进行线程互斥...
+  pthread_mutex_lock(&m_mutex);
+  CRoom * lpUdpRoom = NULL;
+  CStudent * lpStudentPusher = NULL;
+  CTeacher * lpTeacherLooker = NULL;
+  do {
+    // 通过指定的房间编号查找UDP房间对象...
+    GM_MapRoom::iterator itorRoom = m_MapRoom.find(inRoomID);
+    if( itorRoom == m_MapRoom.end() )
+      break;
+    // 获取UDP房间里的唯一老师观看者对象和唯一学生推流者对象...
+    lpUdpRoom = itorRoom->second; assert(lpUdpRoom != NULL);
+    lpTeacherLooker = lpUdpRoom->GetTeacherLooker();
+    lpStudentPusher = lpUdpRoom->GetStudentPusher();
+    // 房间里的老师观看者对象有效，删除之...
+    if( lpTeacherLooker != NULL ) {
+      // 设置删除标志，不要通知老师端，避免死锁...
+      lpTeacherLooker->SetDeleteByTCP();
+      // 通过关联端口号，删除老师观看者对象...
+      this->doTagDelete(lpTeacherLooker->GetHostPort());
+    }
+    // 房间里的学生推流者对象有效，删除之...
+    if( lpStudentPusher != NULL ) {
+      // 设置删除标志，不要通知学生端，避免死锁...
+      lpStudentPusher->SetDeleteByTCP();
+      // 通过关联端口号，删除学生推流者对象...
+      this->doTagDelete(lpStudentPusher->GetHostPort());
+    }
+  } while( false );  
+  // 最后退出线程互斥...
+  pthread_mutex_unlock(&m_mutex);    
+}

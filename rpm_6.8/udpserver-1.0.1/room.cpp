@@ -50,6 +50,12 @@ void CRoom::doDeleteStudent(CStudent * lpStudent)
     return;
   // 如果是学生推流端 => 告诉房间里的TCP讲师端，可以删除拉流线程了...
   if( lpStudent == m_lpStudentPusher ) {
+    // 如果是讲师端发起的删除，置空返回...
+    if( lpStudent->GetDeleteByTCP() ) {
+      m_lpStudentPusher = NULL;
+      return;
+    }
+    // 如果是学生端发起的删除，通知讲师端，可以删除拉流线程了，然后置空，返回...
     GetApp()->doUDPStudentPusherOnLine(m_nRoomID, lpStudent->GetDBCameraID(), false);
     m_lpStudentPusher = NULL;
     return;

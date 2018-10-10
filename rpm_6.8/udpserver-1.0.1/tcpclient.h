@@ -28,15 +28,17 @@ private:
   int       doStudentClient(Cmd_Header * lpHeader, const char * lpJsonPtr);  // 处理Student事件...
   int       doTeacherClient(Cmd_Header * lpHeader, const char * lpJsonPtr);  // 处理Teacher事件...
 private:
-  int       doCmdCameraPullStop();
-  int       doCmdCameraPullStart();
+  int       doCmdStudentCameraLiveStop();
+  int       doCmdStudentCameraPullStop();
+  int       doCmdStudentCameraPullStart();
   int       doCmdStudentLogin();
   int       doCmdStudentOnLine();
   int       doCmdTeacherLogin();
   int       doCmdTeacherOnLine();
+  int       doCmdTeacherCameraLiveStop();
   int       doCmdTeacherCameraLiveStart();
   int       doCmdTeacherCameraOnLineList();
-  int       doTrasferCameraLiveStartByTeacher(int nDBCameraID);
+  int       doTrasferCameraLiveCmdByTeacher(int nCmdID, int nDBCameraID);
   int       doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine);
   int       doSendCmdLoginForTeacher(int nSceneItemID, int inDBCameraID, bool bIsCameraOnLine);
   int       doSendCommonCmd(int nCmdID, const char * lpJsonPtr = NULL, int nJsonSize = 0);

@@ -21,6 +21,7 @@ public:
   void        doDelLoseForStudent(CStudent * lpStudent);
   void        doAddSupplyForTeacher(CTeacher * lpTeacher);
   void        doDelSupplyForTeacher(CTeacher * lpTeacher);
+  void        doDeleteForCameraLiveStop(int inRoomID);
   bool        IsUDPTeacherPusherOnLine(int inRoomID);
   bool        IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID);
   void        doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag);
