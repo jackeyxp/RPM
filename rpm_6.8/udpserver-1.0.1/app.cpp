@@ -336,7 +336,8 @@ bool CApp::doInitRLimit()
   return true;
 }
 
-// 获取本机外网地址...
+// 注意：阿里云专有网络无法获取外网地址，中心服务器可以同链接获取外网地址...
+// 因此，这个接口作废了，不会被调用，而是让中心服务器通过链接地址自动获取...
 bool CApp::doInitWanAddr()
 {
   struct ifaddrs *ifaddr, *ifa;

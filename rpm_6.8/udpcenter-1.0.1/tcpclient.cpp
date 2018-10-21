@@ -219,8 +219,11 @@ int CTCPClient::doCmdUdpServerLogin()
   // 创建或更新服务器对象，创建成功，更新信息...
   CUdpServer * lpUdpServer = GetApp()->doCreateUdpServer(m_nConnFD);
   if( lpUdpServer != NULL ) {
-    lpUdpServer->m_strRemoteAddr = m_MapJson["remote_addr"];
-    lpUdpServer->m_strUdpAddr = m_MapJson["udp_addr"];
+    // 注意：阿里云专有网络无法获取外网地址，ECS绑定了公网地址，TCP链接获取的地址就是这个公网地址...
+    // 注意：UDPServer的远程地址和UDP地址都是相同的，通过TCP链接获取到的公网地址...
+    // 注意：UDPServer传递的参数remote_addr和udp_addr，都是空地址...
+    lpUdpServer->m_strRemoteAddr = this->m_strSinAddr; //m_MapJson["remote_addr"];
+    lpUdpServer->m_strUdpAddr = this->m_strSinAddr; //m_MapJson["udp_addr"];
     lpUdpServer->m_nUdpPort = atoi(m_MapJson["udp_port"].c_str());
     lpUdpServer->m_nRemotePort = atoi(m_MapJson["remote_port"].c_str());
     log_trace("[UdpServer] UdpAddr => %s:%d, RemoteAddr => %s:%d",

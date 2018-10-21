@@ -210,6 +210,7 @@ int CTCPCenter::doCreateTCPSocket(const char * lpInAddr, int nHostPort)
   int nRemotePort = GetApp()->GetTcpPort();
   string & strWanAddr = GetApp()->GetWanAddr();
   json_object * new_obj = json_object_new_object();
+  // 注意：阿里云专有网络无法获取外网地址，中心服务器可以同链接获取外网地址，这里的外网地址为空地址...
   json_object_object_add(new_obj, "remote_addr", json_object_new_string(strWanAddr.c_str()));
   json_object_object_add(new_obj, "remote_port", json_object_new_int(nRemotePort));
   json_object_object_add(new_obj, "udp_addr", json_object_new_string(strWanAddr.c_str()));
