@@ -262,6 +262,10 @@ const char * get_command_name(int inCmd)
     case kCmd_UdpServer_AddStudent: return "UdpServer_AddStudent";
     case kCmd_UdpServer_DelStudent: return "UdpServer_DelStudent";
     case kCmd_PHP_GetUdpServer:     return "PHP_GetUdpServer";
+    case kCmd_PHP_GetAllServer:     return "PHP_GetAllServer";
+    case kCmd_PHP_GetAllClient:     return "PHP_GetAllClient";
+    case kCmd_PHP_GetRoomList:      return "PHP_GetRoomList";
+    case kCmd_PHP_GetPlayerList:    return "PHP_GetPlayerList";
   }
   return "unknown";
 }

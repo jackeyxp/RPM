@@ -22,6 +22,10 @@ private:
   int       doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr);       // 处理PHP客户端事件...
   int       doUdpServerClient(Cmd_Header * lpHeader, const char * lpJsonPtr); // 处理UdpServer事件...
 private:
+  int       doCmdPHPGetPlayerList();
+  int       doCmdPHPGetRoomList();
+  int       doCmdPHPGetAllClient();
+  int       doCmdPHPGetAllServer();
   int       doCmdPHPGetUdpServer();
   int       doCmdUdpServerLogin();
   int       doCmdUdpServerOnLine();

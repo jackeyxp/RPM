@@ -119,6 +119,10 @@ enum {
   kCmd_UdpServer_AddStudent = 15,
   kCmd_UdpServer_DelStudent = 16,
   kCmd_PHP_GetUdpServer     = 17,
+  kCmd_PHP_GetAllServer     = 18,
+  kCmd_PHP_GetAllClient     = 19,
+  kCmd_PHP_GetRoomList      = 20,
+  kCmd_PHP_GetPlayerList    = 21,
 };
 
 // define the command header...

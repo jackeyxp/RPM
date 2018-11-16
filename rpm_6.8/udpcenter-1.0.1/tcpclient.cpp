@@ -132,9 +132,172 @@ int CTCPClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
   switch(lpHeader->m_cmd)
   {
     case kCmd_PHP_GetUdpServer:   nResult = this->doCmdPHPGetUdpServer(); break;
+    case kCmd_PHP_GetAllServer:   nResult = this->doCmdPHPGetAllServer(); break;
+    case kCmd_PHP_GetAllClient:   nResult = this->doCmdPHPGetAllClient(); break;
+    case kCmd_PHP_GetRoomList:    nResult = this->doCmdPHPGetRoomList(); break;
+    case kCmd_PHP_GetPlayerList:  nResult = this->doCmdPHPGetPlayerList(); break;
   }
   // 默认全部返回正确...
   return 0;
+}
+
+// 处理PHP发送的查询指定服务器的房间列表...
+int CTCPClient::doCmdPHPGetRoomList()
+{
+  // 准备反馈需要的变量...
+  int nErrCode = ERR_OK;
+  // 创建反馈的json数据包...
+  json_object * new_obj = json_object_new_object();
+  do {
+    // 判断传递JSON数据有效性 => 必须包含server_id字段信息...
+    if( m_MapJson.find("server_id") == m_MapJson.end() ) {
+      nErrCode = ERR_NO_SERVER;
+      break;
+    }
+    // 获取传递过来的服务器套接字编号...
+    int nSocketFD = atoi(m_MapJson["server_id"].c_str());
+    // 通过套接字编号直接查找直播服务器...
+    CUdpServer * lpUdpServer = GetApp()->doFindUdpServer(nSocketFD);
+    if( lpUdpServer == NULL ) {
+      nErrCode = ERR_NO_SERVER;
+      break;
+    }
+    // 先计算在线房间总数，放入JSON数据包当中...
+    json_object_object_add(new_obj, "list_num", json_object_new_int(lpUdpServer->GetRoomCount()));
+    // 遍历在线的房间列表，组合成记录，发送给PHP客户端...
+    GM_MapRoom & theMapRoom = lpUdpServer->m_MapRoom;
+    GM_MapRoom::iterator itorItem;
+    CTCPRoom * lpTCPRoom = NULL;
+    if( theMapRoom.size() > 0 ) {
+      json_object * new_array = json_object_new_array();
+      for(itorItem = theMapRoom.begin(); itorItem != theMapRoom.end(); ++itorItem) {
+        lpTCPRoom = itorItem->second;
+        // 每条数据内容 => room_id|teacher|student
+        json_object * data_obj = json_object_new_object();
+        json_object_object_add(data_obj, "room_id", json_object_new_int(lpTCPRoom->GetRoomID()));
+        json_object_object_add(data_obj, "teacher", json_object_new_int(lpTCPRoom->GetTeacherCount()));
+        json_object_object_add(data_obj, "student", json_object_new_int(lpTCPRoom->GetStudentCount()));
+        json_object_array_add(new_array, data_obj);
+      }
+      // 将数组放入核心对象当中...
+      json_object_object_add(new_obj, "list_data", new_array);
+    }
+  } while( false );
+  // 组合错误信息内容...
+  json_object_object_add(new_obj, "err_code", json_object_new_int(nErrCode));
+  json_object_object_add(new_obj, "err_cmd", json_object_new_int(kCmd_PHP_GetRoomList));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendPHPResponse(lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+// 处理PHP发送的查询指定房间的用户列表...
+int CTCPClient::doCmdPHPGetPlayerList()
+{
+  // 准备反馈需要的变量...
+  int nErrCode = ERR_OK;
+  // 创建反馈的json数据包...
+  json_object * new_obj = json_object_new_object();
+  // 组合错误信息内容...
+  json_object_object_add(new_obj, "err_code", json_object_new_int(nErrCode));
+  json_object_object_add(new_obj, "err_cmd", json_object_new_int(kCmd_PHP_GetPlayerList));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendPHPResponse(lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+// 处理PHP发送的查询所有在线用户列表...
+int CTCPClient::doCmdPHPGetAllClient()
+{
+  // 准备反馈需要的变量...
+  int nErrCode = ERR_OK;
+  // 创建反馈的json数据包...
+  CTCPClient * lpTCPClient = NULL;
+  GM_MapTCPConn::iterator itorItem;
+  json_object * new_obj = json_object_new_object();
+  CTCPThread * lpTCPThread = GetApp()->GetTCPThread();
+  GM_MapTCPConn & theMapConn = lpTCPThread->GetMapConnect();
+  // 先计算在线客户端总数，放入JSON数据包当中...
+  json_object_object_add(new_obj, "list_num", json_object_new_int(theMapConn.size()));
+  // 遍历在线的客户端列表，组合成记录，发送给PHP客户端...
+  if( theMapConn.size() > 0 ) {
+    json_object * new_array = json_object_new_array();
+    for(itorItem = theMapConn.begin(); itorItem != theMapConn.end(); ++itorItem) {
+      lpTCPClient = itorItem->second;
+      // 每条数据内容 => client_type|client_addr|client_port
+      json_object * data_obj = json_object_new_object();
+      json_object_object_add(data_obj, "client_type", json_object_new_string(get_client_type(lpTCPClient->m_nClientType)));
+      json_object_object_add(data_obj, "client_addr", json_object_new_string(lpTCPClient->m_strSinAddr.c_str()));
+      json_object_object_add(data_obj, "client_port", json_object_new_int(lpTCPClient->m_nHostPort));
+      json_object_array_add(new_array, data_obj);
+    }
+    // 将数组放入核心对象当中...
+    json_object_object_add(new_obj, "list_data", new_array);    
+  }
+  // 组合错误信息内容...
+  json_object_object_add(new_obj, "err_code", json_object_new_int(nErrCode));
+  json_object_object_add(new_obj, "err_cmd", json_object_new_int(kCmd_PHP_GetAllClient));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendPHPResponse(lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+// 处理PHP发送的查询所有在线的UDP服务器的事件...
+int CTCPClient::doCmdPHPGetAllServer()
+{
+  // 准备反馈需要的变量...
+  int nErrCode = ERR_OK;
+  // 创建反馈的json数据包...
+  CUdpServer * lpUdpServer = NULL;
+  GM_MapServer::iterator itorItem;
+  json_object * new_obj = json_object_new_object();
+  GM_MapServer & theMapServer = GetApp()->GetMapServer();
+  // 先计算在线UDP服务器总数，放入JSON数据包当中...
+  json_object_object_add(new_obj, "list_num", json_object_new_int(theMapServer.size()));
+  // 遍历在线的UDP服务器列表，组合成记录，发送给PHP客户端...
+  if( theMapServer.size() > 0 ) {
+    json_object * new_array = json_object_new_array();
+    for(itorItem = theMapServer.begin(); itorItem != theMapServer.end(); ++itorItem) {
+      lpUdpServer = itorItem->second;
+      // 每条数据内容 => remote_addr|remote_port|udp_addr|udp_port|room_num|server
+      json_object * data_obj = json_object_new_object();
+      json_object_object_add(data_obj, "remote_addr", json_object_new_string(lpUdpServer->m_strRemoteAddr.c_str()));
+      json_object_object_add(data_obj, "remote_port", json_object_new_int(lpUdpServer->m_nRemotePort));
+      json_object_object_add(data_obj, "udp_addr", json_object_new_string(lpUdpServer->m_strUdpAddr.c_str()));
+      json_object_object_add(data_obj, "udp_port", json_object_new_int(lpUdpServer->m_nUdpPort));
+      json_object_object_add(data_obj, "room_num", json_object_new_int(lpUdpServer->GetRoomCount()));
+      json_object_object_add(data_obj, "server_id", json_object_new_int(itorItem->first));
+      json_object_array_add(new_array, data_obj);
+    }
+    // 将数组放入核心对象当中...
+    json_object_object_add(new_obj, "list_data", new_array);
+  }
+  // 组合错误信息内容...
+  json_object_object_add(new_obj, "err_code", json_object_new_int(nErrCode));
+  json_object_object_add(new_obj, "err_cmd", json_object_new_int(kCmd_PHP_GetAllServer));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendPHPResponse(lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
 }
 
 // 处理PHP发送的根据房间号查询UDP服务器的事件...

@@ -17,14 +17,16 @@ public:
   bool         doInitRLimit();
   void         doWaitForExit();
 public:
-  CUdpServer * doFindMinUdpServer();
-  CUdpServer * doFindUdpServer(int inSocketFD);
-  CUdpServer * doCreateUdpServer(int inSocketFD);
-  void         doDeleteUdpServer(int inSocketFD);
-  CTCPRoom  *  doFindTCPRoom(int nRoomID);
-  CTCPRoom  *  doCreateRoom(int nRoomID, CUdpServer * lpUdpServer);
-  void         doDeleteRoom(CUdpServer * lpUdpServer);
-  void         doDeleteRoom(int nRoomID);
+  GM_MapServer & GetMapServer() { return m_MapServer; }
+  CTCPThread   * GetTCPThread() { return m_lpTCPThread; }
+  CUdpServer   * doFindMinUdpServer();
+  CUdpServer   * doFindUdpServer(int inSocketFD);
+  CUdpServer   * doCreateUdpServer(int inSocketFD);
+  void           doDeleteUdpServer(int inSocketFD);
+  CTCPRoom     * doFindTCPRoom(int nRoomID);
+  CTCPRoom     * doCreateRoom(int nRoomID, CUdpServer * lpUdpServer);
+  void           doDeleteRoom(CUdpServer * lpUdpServer);
+  void           doDeleteRoom(int nRoomID);
 private:
   os_sem_t     *    m_sem_t;          // 辅助线程信号量...
   CTCPThread   *    m_lpTCPThread;    // TCP监听线程对象...
