@@ -327,7 +327,7 @@ void CStudent::doSendLosePacket(bool bIsAudio)
   addrStudent.sin_family = AF_INET;
   addrStudent.sin_port = htons(nHostPort);
   addrStudent.sin_addr.s_addr = htonl(nHostAddr);
-  // 回复学生推流端 => 序列头已经收到，不要再发序列头命令了...
+  // 回复学生观看端 => 发送补包命令数据内容...
   if( sendto(listen_fd, (void*)lpSendHeader, nSendSize, 0, (sockaddr*)&addrStudent, sizeof(addrStudent)) < 0 ) {
     log_trace("sendto error(code:%d, %s)", errno, strerror(errno));
     return;
