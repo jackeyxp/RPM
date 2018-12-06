@@ -520,7 +520,7 @@ bool CApp::doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr)
   if( itorItem == m_MapNetwork.end() ) {
     // 如果不是创建命令 => 打印错误信息...
     if( ptTag != PT_TAG_CREATE ) {
-      log_debug("Server Reject for tmTag: %d, idTag: %d, ptTag: %d", tmTag, idTag, ptTag);
+      log_debug("Server Reject for tmTag: %s, idTag: %s, ptTag: %d", get_tm_tag(tmTag), get_id_tag(idTag), ptTag);
       return false;
     }
     assert( ptTag == PT_TAG_CREATE );
@@ -554,7 +554,7 @@ void CApp::doTagDelete(int nHostPort)
   GM_MapNetwork::iterator itorItem;
   itorItem = m_MapNetwork.find(nHostPort);
   if( itorItem == m_MapNetwork.end() ) {
-    log_debug("Delete can't find CNetwork by host port");
+    log_debug("Delete can't find CNetwork by host port(%d)", nHostPort);
     return;
   }
   // 将找到的CNetwork对象删除之...
@@ -580,15 +580,15 @@ void CApp::doDeleteForCameraLiveStop(int inRoomID)
     lpUdpRoom = itorRoom->second; assert(lpUdpRoom != NULL);
     lpTeacherLooker = lpUdpRoom->GetTeacherLooker();
     lpStudentPusher = lpUdpRoom->GetStudentPusher();
-    // 房间里的老师观看者对象有效，删除之...
-    if( lpTeacherLooker != NULL ) {
+    // 房间里的老师观看者对象有效，并且UDP删除命令还没有到达，删除之...
+    if( lpTeacherLooker != NULL && !lpTeacherLooker->GetDeleteByUDP() ) {
       // 设置删除标志，不要通知老师端，避免死锁...
       lpTeacherLooker->SetDeleteByTCP();
       // 通过关联端口号，删除老师观看者对象...
       this->doTagDelete(lpTeacherLooker->GetHostPort());
     }
-    // 房间里的学生推流者对象有效，删除之...
-    if( lpStudentPusher != NULL ) {
+    // 房间里的学生推流者对象有效，并且UDP删除命令还没有到达，删除之...
+    if( lpStudentPusher != NULL && !lpStudentPusher->GetDeleteByUDP() ) {
       // 设置删除标志，不要通知学生端，避免死锁...
       lpStudentPusher->SetDeleteByTCP();
       // 通过关联端口号，删除学生推流者对象...

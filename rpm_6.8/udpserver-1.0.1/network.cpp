@@ -6,6 +6,7 @@ CNetwork::CNetwork(uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t i
   : m_nHostAddr(inHostAddr)
   , m_nHostPort(inHostPort)
   , m_bIsDeleteByTCP(false)
+  , m_bIsDeleteByUDP(false)
   , m_tmTag(tmTag)
   , m_idTag(idTag)
   , m_lpRoom(NULL)
@@ -17,7 +18,13 @@ CNetwork::CNetwork(uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t i
 CNetwork::~CNetwork()
 {
   // 如果是被TCP删除的，不要通知TCP关联终端...
-  if( m_bIsDeleteByTCP ) return;
+  if( m_bIsDeleteByTCP ) {
+    log_trace("[%s-%s-Delete] by TCP", get_tm_tag(m_tmTag), get_id_tag(m_idTag));
+    return;
+  }
+  // 不是被TCP删除的，就是被UDP删除的...
+  m_bIsDeleteByUDP = true;
+  log_trace("[%s-%s-Delete] by UDP", get_tm_tag(m_tmTag), get_id_tag(m_idTag));
   // 通过相互关联的TCP连接通知终端UDP连接退出了...
   GetApp()->doLogoutForUDP(m_rtp_create.tcpSock, m_rtp_create.liveID, this->GetTmTag(), this->GetIdTag());
 }

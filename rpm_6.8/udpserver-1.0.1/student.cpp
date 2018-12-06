@@ -8,13 +8,15 @@ CStudent::CStudent(uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t i
   : CNetwork(tmTag, idTag, inHostAddr, inHostPort)
 {
   // 打印学生端被创建信息...
-  log_trace("[Student-Create] HostPort: %d, tmTag: %d, idTag: %d", inHostPort, tmTag, idTag);
+  log_trace("[Student-Create] HostPort: %d, tmTag: %s, idTag: %s", inHostPort, get_tm_tag(tmTag), get_id_tag(idTag));
 }
 
 CStudent::~CStudent()
 {
   // 打印学生端被删除信息...
-  log_trace("[Student-Delete] HostPort: %d, tmTag: %d, idTag: %d, LiveID: %d", this->GetHostPort(), this->GetTmTag(), this->GetIdTag(), this->GetDBCameraID());
+  log_trace("[Student-Delete] HostPort: %d, tmTag: %s, idTag: %s, LiveID: %d", 
+            this->GetHostPort(), get_tm_tag(this->GetTmTag()), 
+            get_id_tag(this->GetIdTag()), this->GetDBCameraID());
   // 在房间中注销本学生端对象...
   if( m_lpRoom != NULL ) {
     m_lpRoom->doDeleteStudent(this);

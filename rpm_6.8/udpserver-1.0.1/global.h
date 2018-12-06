@@ -79,6 +79,8 @@ int       os_sem_timedwait(os_sem_t *sem, unsigned long milliseconds);
 
 const char * get_client_type(int inType);
 const char * get_command_name(int inCmd);
+const char * get_tm_tag(int tmTag);
+const char * get_id_tag(int idTag);
 
 //////////////////////////////////////////////////////////////////////////
 // 以下是有关TCP中转服务器的相关变量和类型定义...
