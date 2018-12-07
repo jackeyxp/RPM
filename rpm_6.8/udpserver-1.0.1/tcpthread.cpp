@@ -64,7 +64,7 @@ void CTCPThread::doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, 
 void CTCPThread::doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag)
 {
   // 进入线程互斥保护...
-  pthread_mutex_lock(&m_mutex);
+  //pthread_mutex_lock(&m_mutex);
   CTCPRoom * lpTCPRoom = NULL;
   GM_MapTCPRoom::iterator itorRoom;
   do {
@@ -75,14 +75,14 @@ void CTCPThread::doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool b
     lpTCPRoom->doUDPStudentPusherOnLine(inDBCameraID, bIsOnLineFlag);
   } while( false );
   // 退出线程互斥保护...
-  pthread_mutex_unlock(&m_mutex);    
+  //pthread_mutex_unlock(&m_mutex);    
 }
 
 // 响应UDP讲师推流端上线的事件通知 => 转发登录命令给所有在线学生端...
 void CTCPThread::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
 {
   // 进入线程互斥保护...
-  pthread_mutex_lock(&m_mutex);
+  //pthread_mutex_lock(&m_mutex);
   CTCPRoom * lpTCPRoom = NULL;
   GM_MapTCPRoom::iterator itorRoom;
   do {
@@ -93,7 +93,7 @@ void CTCPThread::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
     lpTCPRoom->doUDPTeacherPusherOnLine(bIsOnLineFlag);
   } while( false );
   // 退出线程互斥保护...
-  pthread_mutex_unlock(&m_mutex);  
+  //pthread_mutex_unlock(&m_mutex);  
 }
 
 // 创建房间 => 通过房间号进行创建...
@@ -241,7 +241,9 @@ void CTCPThread::Entry()
     time_t nDeltaTime = time(NULL) - myStartTime;
     if( nDeltaTime >= WAIT_TIME_OUT/1000 ) {
       myStartTime = time(NULL);
+      pthread_mutex_lock(&m_mutex);
       this->doHandleTimeout();
+      pthread_mutex_unlock(&m_mutex);  
     }
     // 刚好是超时事件，继续下次等待...
     if( nfds == 0 )
