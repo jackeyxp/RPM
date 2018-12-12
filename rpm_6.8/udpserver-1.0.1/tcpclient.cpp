@@ -539,13 +539,13 @@ int CTCPClient::parseJsonData(const char * lpJsonPtr, int nJsonLength)
   // 解析 JSON 数据包失败，直接返回错误号...
   json_object * new_obj = json_tokener_parse(lpJsonPtr);
   if( new_obj == NULL ) {
-    log_trace("parse json data error");
+    log_trace("parse json data error => %d, %s", nJsonLength, lpJsonPtr);
     return -1;
   }
   // check the json type => must be json_type_object...
   json_type nJsonType = json_object_get_type(new_obj);
   if( nJsonType != json_type_object ) {
-    log_trace("parse json data error");
+    log_trace("parse json data error => %d, %s", nJsonLength, lpJsonPtr);
     json_object_put(new_obj);
     return -1;
   }
