@@ -101,6 +101,27 @@ CUdpServer * CApp::doFindUdpServer(int inSocketFD)
   return lpUdpServer;
 }
 
+// 查找第一个有效的调试模式的直播服务器...
+CUdpServer * CApp::doFindDebugUdpServer()
+{
+  // 没有服务器，直接返回...
+  if( m_MapServer.size() <= 0 )
+    return NULL;
+  assert( m_MapServer.size() > 0 );
+  GM_MapServer::iterator itorItem;
+  CUdpServer * lpDebugServer = NULL;
+  for(itorItem = m_MapServer.begin(); itorItem != m_MapServer.end(); ++itorItem) {
+    CUdpServer * lpCurServer = itorItem->second;
+    // 服务器如果是调试模式，直接返回...
+    if(lpCurServer->IsDebugMode()) {
+      lpDebugServer = lpCurServer;
+      break;
+    }
+  }
+  // 返回最终查找结果...
+  return lpDebugServer;
+}
+
 // 查找直播服务器列表中挂载房间最少的服务器...
 CUdpServer * CApp::doFindMinUdpServer()
 {
@@ -108,21 +129,25 @@ CUdpServer * CApp::doFindMinUdpServer()
   if( m_MapServer.size() <= 0 )
     return NULL;
   assert( m_MapServer.size() > 0 );
-  // 先拿出一个节点的数据作为最小值...
-  GM_MapServer::iterator itorItem = m_MapServer.begin();
-  CUdpServer * lpMinServer = itorItem->second;
-  int nMinCount = lpMinServer->GetRoomCount();
-  // 如果第一个服务器的挂载量为0，直接返回...
-  if( nMinCount <= 0 )
-    return lpMinServer;
+  CUdpServer * lpMinServer = NULL;
+  GM_MapServer::iterator itorItem;
+  int nMinCount = -1;
   // 遍历所有节点，找到最小的节点...
   for(itorItem = m_MapServer.begin(); itorItem != m_MapServer.end(); ++itorItem) {
     CUdpServer * lpCurServer = itorItem->second;
     int nCurCount = lpCurServer->GetRoomCount();
+    // 如果是调试服务器，跳过继续查找...
+    if( lpCurServer->IsDebugMode() )
+      continue;
     // 如果当前服务器挂载量为0，直接返回...
     if( nCurCount <= 0) {
       lpMinServer = lpCurServer;
       break;
+    }
+    // 计算初始最小挂载量和服务器...
+    if( nMinCount < 0 ) {
+      nMinCount = nCurCount;
+      lpMinServer = lpCurServer;
     }
     // 计算最小挂载量的直播服务器...
     if( nCurCount < nMinCount ) {
@@ -130,8 +155,7 @@ CUdpServer * CApp::doFindMinUdpServer()
       lpMinServer = lpCurServer;
     }
   }
-  // 直接返回最小挂在量的直播服务器对象...
-  assert( lpMinServer != NULL );
+  // 返回最小挂在量的服务器...
   return lpMinServer;
 }
 
@@ -189,7 +213,7 @@ CTCPRoom * CApp::doFindTCPRoom(int nRoomID)
 
 CUdpServer::CUdpServer()
 {
-  
+  m_bIsDebugMode = false;
 }
 
 CUdpServer::~CUdpServer()

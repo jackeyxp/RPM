@@ -20,6 +20,7 @@ public:
   GM_MapServer & GetMapServer() { return m_MapServer; }
   CTCPThread   * GetTCPThread() { return m_lpTCPThread; }
   CUdpServer   * doFindMinUdpServer();
+  CUdpServer   * doFindDebugUdpServer();
   CUdpServer   * doFindUdpServer(int inSocketFD);
   CUdpServer   * doCreateUdpServer(int inSocketFD);
   void           doDeleteUdpServer(int inSocketFD);
@@ -41,6 +42,7 @@ public:
   ~CUdpServer();
 public:
   int          GetRoomCount() { return m_MapRoom.size(); }
+  bool         IsDebugMode() { return m_bIsDebugMode; }
 public:
   void         doMountRoom(CTCPRoom * lpRoom);
   void         doUnMountRoom(int nRoomID);
@@ -54,6 +56,7 @@ private:
   string       m_strUdpAddr;      // 服务器UDP地址
   int          m_nRemotePort;     // 服务器远程端口
   int          m_nUdpPort;        // 服务器UDP端口
+  bool         m_bIsDebugMode;    // 服务器是调试模式标志...
   
   friend class CTCPClient;
 };

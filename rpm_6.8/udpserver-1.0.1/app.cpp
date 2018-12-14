@@ -1,6 +1,7 @@
 
 #include "app.h"
 #include "room.h"
+#include "getopt.h"
 #include "student.h"
 #include "teacher.h"
 #include "tcpthread.h"
@@ -11,6 +12,7 @@ CApp::CApp()
   : m_listen_fd(0)
   , m_sem_t(NULL)
   , m_lpTCPThread(NULL)
+  , m_bIsDebugMode(false)
 {
   // 初始化线程互斥对象...
   pthread_mutex_init(&m_mutex, NULL);
@@ -46,6 +48,25 @@ CApp::~CApp()
   pthread_mutex_destroy(&m_mutex);
   // 释放辅助线程信号量...
   os_sem_destroy(m_sem_t);
+}
+
+// 调用位置，详见 udpserver.c::main() 函数，只调用一次...
+void CApp::doProcessCmdLine(int argc, char * argv[])
+{
+	int	ch = 0;
+	while ((ch = getopt(argc, argv, "?hvdr")) != EOF)
+	{
+		switch (ch) {
+		case 'd': m_bIsDebugMode = true;  break;
+		case 'r': m_bIsDebugMode = false; break;
+		case '?':
+		case 'h':
+		case 'v':
+			log_trace("-d: Run as Debug Mode => mount on Debug student and Debug teacher.");
+			log_trace("-r: Run as Release Mode => mount on Release student and Debug teacher.");
+			break;
+		}
+	}
 }
 
 void CApp::doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag)

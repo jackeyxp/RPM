@@ -280,6 +280,7 @@ int CTCPClient::doCmdPHPGetAllServer()
       json_object_object_add(data_obj, "remote_port", json_object_new_int(lpUdpServer->m_nRemotePort));
       json_object_object_add(data_obj, "udp_addr", json_object_new_string(lpUdpServer->m_strUdpAddr.c_str()));
       json_object_object_add(data_obj, "udp_port", json_object_new_int(lpUdpServer->m_nUdpPort));
+      json_object_object_add(data_obj, "debug_mode", json_object_new_int(lpUdpServer->m_bIsDebugMode));
       json_object_object_add(data_obj, "room_num", json_object_new_int(lpUdpServer->GetRoomCount()));
       json_object_object_add(data_obj, "server_id", json_object_new_int(itorItem->first));
       json_object_array_add(new_array, data_obj);
@@ -313,14 +314,21 @@ int CTCPClient::doCmdPHPGetUdpServer()
       nErrCode = ERR_NO_ROOM;
       break;
     }
-    // 获取传递过来的房间编号...
+    // 获取传递过来的房间编号和终端运行模式...
+    CApp * lpApp = GetApp();
     int nRoomID = atoi(m_MapJson["room_id"].c_str());
+    bool bIsDebugMode = ((m_MapJson.find("debug_mode") == m_MapJson.end()) ? false : atoi(m_MapJson["debug_mode"].c_str()));
     // 通过房间号查找房间的方式，间接查找直播服务器...
-    CTCPRoom * lpTCPRoom = GetApp()->doFindTCPRoom(nRoomID);
+    CTCPRoom * lpTCPRoom = lpApp->doFindTCPRoom(nRoomID);
     CUdpServer * lpUdpServer = ((lpTCPRoom != NULL) ? lpTCPRoom->GetUdpServer() : NULL);
+    // 如果直播服务器有效，查看运行模式是否与终端一致，不一致，返回不匹配...
+    if( lpUdpServer != NULL && lpUdpServer->m_bIsDebugMode != bIsDebugMode ) {
+      nErrCode = ERR_MODE_MATCH;
+      break;
+    }
     // 如果直播服务器无效，查找挂载量最小的直播服务器...
     if( lpUdpServer == NULL ) {
-      lpUdpServer = GetApp()->doFindMinUdpServer();
+      lpUdpServer = (bIsDebugMode ? lpApp->doFindDebugUdpServer() : lpApp->doFindMinUdpServer());
     }
     // 如果最终还是没有找到直播服务器，设置错误编号...
     if( lpUdpServer == NULL ) {
@@ -385,11 +393,13 @@ int CTCPClient::doCmdUdpServerLogin()
     // 注意：阿里云专有网络无法获取外网地址，ECS绑定了公网地址，TCP链接获取的地址就是这个公网地址...
     // 注意：UDPServer的远程地址和UDP地址都是相同的，通过TCP链接获取到的公网地址...
     // 注意：UDPServer传递的参数remote_addr和udp_addr，都是空地址...
+    lpUdpServer->m_bIsDebugMode = ((m_MapJson.find("debug_mode") == m_MapJson.end()) ? false : atoi(m_MapJson["debug_mode"].c_str()));
     lpUdpServer->m_strRemoteAddr = this->m_strSinAddr; //m_MapJson["remote_addr"];
     lpUdpServer->m_strUdpAddr = this->m_strSinAddr; //m_MapJson["udp_addr"];
     lpUdpServer->m_nUdpPort = atoi(m_MapJson["udp_port"].c_str());
     lpUdpServer->m_nRemotePort = atoi(m_MapJson["remote_port"].c_str());
-    log_trace("[UdpServer] UdpAddr => %s:%d, RemoteAddr => %s:%d",
+    log_trace("[UdpServer] Mode => %s, UdpAddr => %s:%d, RemoteAddr => %s:%d",
+              lpUdpServer->m_bIsDebugMode ? "Debug" : "Release",
               lpUdpServer->m_strUdpAddr.c_str(), lpUdpServer->m_nUdpPort,
               lpUdpServer->m_strRemoteAddr.c_str(), lpUdpServer->m_nRemotePort);
   }

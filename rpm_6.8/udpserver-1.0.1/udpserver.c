@@ -1,6 +1,7 @@
 
 #include "app.h"
 #include "bmem.h"
+#include "getopt.h"
 
 #include <sys/stat.h>
 
@@ -25,6 +26,8 @@ int main(int argc, char **argv)
     return -1;
   // 构造日志文件完整路径...
   sprintf(g_log_file_path, "%s%s", g_absolute_path, "udpserver.log");
+  // 读取命令行各字段内容信息...
+  theApp.doProcessCmdLine(argc, argv);
   // 增大文件打开数量...
   if( !theApp.doInitRLimit() )
     return -1;

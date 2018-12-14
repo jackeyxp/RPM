@@ -91,6 +91,7 @@ typedef map<string, string>     GM_MapJson;       // key        => value => JSON
 #define ERR_OK          0
 #define ERR_NO_ROOM     10001
 #define ERR_NO_SERVER   10002
+#define ERR_MODE_MATCH  10003
 
 // define client type...
 enum {

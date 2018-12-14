@@ -17,6 +17,7 @@ public:
   bool        doInitWanAddr();
   void        doWaitSocket();
   int         doCreateUdpSocket();
+  void        doProcessCmdLine(int argc, char * argv[]);
   void        doAddLoseForStudent(CStudent * lpStudent);
   void        doDelLoseForStudent(CStudent * lpStudent);
   void        doAddSupplyForTeacher(CTeacher * lpTeacher);
@@ -36,6 +37,7 @@ public:
   string   &  GetWanAddr() { return m_strWanAddr; }
   int         GetUdpPort() { return DEF_UDP_PORT; }
   int         GetTcpPort() { return DEF_TCP_PORT; }
+  bool        IsDebugMode() { return m_bIsDebugMode; }
 private:
   bool        doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr);
   void        doTagDelete(int nHostPort);
@@ -44,6 +46,7 @@ private:
   int         doSendSupply();
   int         doSendLose();
 private:
+  bool              m_bIsDebugMode;   // 是否是调试模式 => 只能挂载调试模式的学生端和讲师端...
   int               m_listen_fd;      // UDP监听套接字...
   string            m_strWanAddr;     // 本地外网地址...
   GM_MapRoom        m_MapRoom;        // 房间列表...
