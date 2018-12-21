@@ -4,6 +4,7 @@
 #include "getopt.h"
 #include <signal.h>
 #include <sys/stat.h>
+#include <execinfo.h>
 
 // STL must use g++...
 // g++ -g udpserver.c bmem.c thread.cpp app.cpp tcpcamera.cpp tcproom.cpp tcpcenter.cpp tcpclient.cpp tcpthread.cpp udpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
@@ -20,6 +21,7 @@ char g_log_file_path[256] = {0};
 bool doGetCurFullPath(char * lpOutPath, int inSize);
 void doSliceLogFile(struct tm * lpCurTm);
 void do_sig_catcher(int signo);
+void do_err_crasher(int signo);
 bool doRegisterSignal();
 
 int main(int argc, char **argv)
@@ -82,15 +84,63 @@ bool doRegisterSignal()
   sa.sa_flags = 0;
   sigaction(SIGINT, &sa, NULL);
   
+  /* Install do_err_crasher() as a signal handler */
+  sa.sa_handler = do_err_crasher;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGILL, &sa, NULL);   // 非法指令
+
+  sa.sa_handler = do_err_crasher;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGBUS, &sa, NULL);   // 总线错误
+
+  sa.sa_handler = do_err_crasher;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGFPE, &sa, NULL);   // 浮点异常
+
+  sa.sa_handler = do_err_crasher;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGABRT, &sa, NULL);  // 来自abort函数的终止信号
+
+  sa.sa_handler = do_err_crasher;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGSEGV, &sa, NULL);  // 无效的存储器引用(段错误)
+  
   return true;
 }
 
 void do_sig_catcher(int signo)
 {
-  log_trace("udpserver catch signal=%d", signo);
+  log_trace("udpserver catch terminate signal=%d", signo);
   if( signo == SIGTERM || signo == SIGINT ) {
     theApp.onSignalQuit();
   }
+}
+
+void do_err_crasher(int signo)
+{
+  // 还原默认的信号处理...
+  signal(signo, SIG_DFL);
+  // 打印发生崩溃的信号编号...
+  log_trace("udpserver catch err-crash signal=%d", signo);
+  //////////////////////////////////////////////////////////////////////////
+  // 注意：枚举当前调用堆栈，堆栈信息太少，还要增加编译开关...
+  // 注意：需要增加编译开关才会有更详细的函数名称 -rdynamic
+  // 注意：不记录崩溃堆栈的原因是由于coredump产生的信息更丰富...
+  // 注意：崩溃捕获更重要的作用是做善后处理，比如：删除pid文件...
+  //////////////////////////////////////////////////////////////////////////
+  /*void * DumpArray[256] = {0};
+  int nSize = backtrace(DumpArray, 256);
+  char ** lppSymbols = backtrace_symbols(DumpArray, nSize);
+  for (int i = 0; i < nSize; i++) {
+    log_trace("callstack => %d, %s", i, lppSymbols[i]);
+  }*/
+  // 最后删除pid文件...
+  theApp.destory_pid_file();
 }
 
 // 获取当前进程全路径...
