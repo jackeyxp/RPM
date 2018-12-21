@@ -3,12 +3,15 @@
 #include "room.h"
 #include "student.h"
 #include "teacher.h"
+#include "udpthread.h"
 
-CTeacher::CTeacher(uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t inHostPort)
+CTeacher::CTeacher(CUDPThread * lpUDPThread, uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t inHostPort)
   : CNetwork(tmTag, idTag, inHostAddr, inHostPort)
+  , m_lpUDPThread(lpUDPThread)
   , m_server_rtt_var_ms(-1)
   , m_server_rtt_ms(-1)
 {
+  assert(m_lpUDPThread != NULL);
   // 初始化序列头和探测命令包...
   m_strSeqHeader.clear();
   memset(&m_server_rtp_detect, 0, sizeof(rtp_detect_t));
@@ -17,17 +20,17 @@ CTeacher::CTeacher(uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t i
 	circlebuf_init(&m_video_circle);
   // 如果是推流端，预分配环形队列空间...
   if( this->GetIdTag() == ID_TAG_PUSHER ) {
-    circlebuf_reserve(&m_audio_circle, 512 * 1024);
-    circlebuf_reserve(&m_video_circle, 512 * 1024);
+    circlebuf_reserve(&m_audio_circle, 256 * 1024);
+    circlebuf_reserve(&m_video_circle, 256 * 1024);
   }
   // 打印老师端被创建信息...
-  log_trace("[Teacher-Create] HostPort: %d, tmTag: %s, idTag: %s", inHostPort, get_tm_tag(tmTag), get_id_tag(idTag));
+  log_trace("[UDP-Teacher-Create] HostPort: %d, tmTag: %s, idTag: %s", inHostPort, get_tm_tag(tmTag), get_id_tag(idTag));
 }
 
 CTeacher::~CTeacher()
 {
   // 打印老师端被删除信息...
-  log_trace("[Teacher-Delete] HostPort: %d, tmTag: %s, idTag: %s, LiveID: %d",
+  log_trace("[UDP-Teacher-Delete] HostPort: %d, tmTag: %s, idTag: %s, LiveID: %d",
             this->GetHostPort(), get_tm_tag(this->GetTmTag()), 
             get_id_tag(this->GetIdTag()), this->GetDBCameraID());
   // 在房间中注销本老师端对象...
@@ -39,7 +42,7 @@ CTeacher::~CTeacher()
 	circlebuf_free(&m_video_circle);
   // 如果是推流端，把自己从补包队列当中删除掉...
   if( this->GetIdTag() == ID_TAG_PUSHER ) {
-    GetApp()->doDelSupplyForTeacher(this);
+    m_lpUDPThread->doDelSupplyForTeacher(this);
   }
   // 打印老师端所在的房间信息...
   if( m_lpRoom != NULL ) {
@@ -258,10 +261,9 @@ bool CTeacher::doTagCreate(char * lpBuffer, int inBufSize)
   // 注意：老师推流者和老师观看者处理方式会有不同...
   //////////////////////////////////////////////////////
   bool bResult = false;
-  CApp * lpApp = GetApp();
   // 更新创建命令包内容，创建或更新房间，更新房间里的老师端...
   memcpy(&m_rtp_create, lpBuffer, sizeof(m_rtp_create));
-  m_lpRoom = lpApp->doCreateRoom(m_rtp_create.roomID);
+  m_lpRoom = m_lpUDPThread->doCreateRoom(m_rtp_create.roomID);
   m_lpRoom->doCreateTeacher(this);
   // 回复老师推流端 => 房间已经创建成功，不要再发创建命令了...
   if( this->GetIdTag() == ID_TAG_PUSHER ) {
@@ -339,7 +341,7 @@ bool CTeacher::doCreateForLooker(char * lpBuffer, int inBufSize)
 
 bool CTeacher::doTagDelete(char * lpBuffer, int inBufSize)
 {
-  // 注意：删除命令已经在CApp::doTagDelete()中拦截处理了...
+  // 注意：删除命令已经在CUDPThread::doTagDelete()中拦截处理了...
   return true;
 }
 
@@ -578,7 +580,7 @@ void CTeacher::doFillLosePack(uint8_t inPType, uint32_t nStartLoseID, uint32_t n
 		++sup_id;
 	}
   // 把自己加入到补包对象列表当中...
-  GetApp()->doAddSupplyForTeacher(this);
+  m_lpUDPThread->doAddSupplyForTeacher(this);
 }
 
 bool CTeacher::doIsServerLose(bool bIsAudio, uint32_t inLoseSeq)

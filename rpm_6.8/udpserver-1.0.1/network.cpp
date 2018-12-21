@@ -19,14 +19,14 @@ CNetwork::~CNetwork()
 {
   // 如果是被TCP删除的，不要通知TCP关联终端...
   if( m_bIsDeleteByTCP ) {
-    log_trace("[%s-%s-Delete] by TCP", get_tm_tag(m_tmTag), get_id_tag(m_idTag));
+    log_trace("[UDP-%s-%s-Delete] by TCP", get_tm_tag(m_tmTag), get_id_tag(m_idTag));
     return;
   }
   // 不是被TCP删除的，就是被UDP删除的...
   m_bIsDeleteByUDP = true;
-  log_trace("[%s-%s-Delete] by UDP", get_tm_tag(m_tmTag), get_id_tag(m_idTag));
+  log_trace("[UDP-%s-%s-Delete] by UDP", get_tm_tag(m_tmTag), get_id_tag(m_idTag));
   // 通过相互关联的TCP连接通知终端UDP连接退出了...
-  GetApp()->doLogoutForUDP(m_rtp_create.tcpSock, m_rtp_create.liveID, this->GetTmTag(), this->GetIdTag());
+  GetApp()->doUDPLogoutToTCP(m_rtp_create.tcpSock, m_rtp_create.liveID, this->GetTmTag(), this->GetIdTag());
 }
 
 void CNetwork::ResetTimeout()

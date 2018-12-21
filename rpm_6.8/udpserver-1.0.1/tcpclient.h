@@ -16,7 +16,7 @@ public:
   void      ResetTimeout();       // 重置超时时间
   void      doUDPTeacherPusherOnLine(bool bIsOnLineFlag);
   void      doUDPStudentPusherOnLine(int inDBCameraID, bool bIsOnLineFlag);
-  void      doLogoutForUDP(int nDBCameraID, uint8_t tmTag, uint8_t idTag);
+  void      doUDPLogoutToTCP(int nDBCameraID, uint8_t tmTag, uint8_t idTag);
 public:
   int       GetConnFD() { return m_nConnFD; }
   int       GetRoomID() { return m_nRoomID; }

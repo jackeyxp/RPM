@@ -9,6 +9,8 @@
 
 CTCPThread::CTCPThread()
   : m_lpTCPCenter(NULL)
+  , m_accept_count(0)
+  , m_max_event(0)
   , m_listen_fd(0)
   , m_epoll_fd(0)
 {
@@ -29,21 +31,26 @@ CTCPThread::~CTCPThread()
     close(m_listen_fd);
     m_listen_fd = 0;
   }
+  // 先关闭epoll句柄对象...
+  if( m_epoll_fd > 0 ) {
+    close(m_epoll_fd);
+    m_epoll_fd = 0;
+  }
   // 关闭TCP中心套接字对象...
   if( m_lpTCPCenter != NULL ) {
     delete m_lpTCPCenter;
     m_lpTCPCenter = NULL;
   }
-  // 删除所有的客户端连接...
+  // 先删终端，再删房间 => 终端有房间指针引用...
   this->clearAllClient();
-  // 删除所有的房间对象...
+  // 先删终端，再删房间 => 终端有房间指针引用...
   this->clearAllRoom();
   // 删除线程互斥对象...
   pthread_mutex_destroy(&m_mutex);  
 }
 
 // 响应UDP终端退出时的事件转发通知...
-void CTCPThread::doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag)
+void CTCPThread::doUDPLogoutToTCP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag)
 {
   // 进入线程互斥保护...
   pthread_mutex_lock(&m_mutex);
@@ -54,7 +61,7 @@ void CTCPThread::doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, 
     if( itorItem == m_MapConnect.end() )
       break;
     lpTCPClient = itorItem->second;
-    lpTCPClient->doLogoutForUDP(nDBCameraID, tmTag, idTag);
+    lpTCPClient->doUDPLogoutToTCP(nDBCameraID, tmTag, idTag);
   } while( false );
   // 退出线程互斥保护...
   pthread_mutex_unlock(&m_mutex);  
@@ -121,6 +128,8 @@ bool CTCPThread::InitThread()
   // 注意：为了保证正常工作，失败之后，仍然继续运行...
   // 创建连接UDP中心服务器的套接字，并加入到epoll队列当中...
   m_lpTCPCenter->InitTCPCenter(m_epoll_fd);
+  // 累加进入epoll队列套接字个数...
+  ++m_max_event;
   // 启动tcp服务器监听线程...
   this->Start();
   return true;
@@ -200,6 +209,8 @@ int CTCPThread::doCreateListenSocket(int nHostPort)
     log_trace("epoll set insertion error: fd=%d", listen_fd);
     return -1;
   }
+  // 累加进入epoll队列套接字个数...
+  ++m_max_event;
   // 返回已经绑定完毕的TCP套接字...
   m_listen_fd = listen_fd;
   return m_listen_fd;
@@ -207,10 +218,83 @@ int CTCPThread::doCreateListenSocket(int nHostPort)
 
 int CTCPThread::SetNonBlocking(int sockfd)
 {
+  // 对套接字进行异步状态设置...
 	if (fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFD, 0)|O_NONBLOCK) == -1) {
 		return -1;
 	}
 	return 0;
+}
+
+void CTCPThread::doTCPCenterEvent(int nEvent)
+{
+  // 响应中心套接字事件，成功，直接返回...
+  if( m_lpTCPCenter->doEpollEvent(nEvent) >= 0 )
+    return;
+  // 处理中心套接字事件，失败，重建套接字...
+  delete m_lpTCPCenter; m_lpTCPCenter = NULL;
+  m_lpTCPCenter = new CTCPCenter(this);
+  m_lpTCPCenter->InitTCPCenter(m_epoll_fd);
+  // 打印信息，提示重建中心对象完毕...
+  log_trace("TCP-Center has been rebuild.");
+}
+
+void CTCPThread::doTCPListenEvent()
+{
+  // 这里要循环accept链接，可能会有多个链接同时到达...
+  while( true ) {
+    // 收到客户端连接的socket...
+    struct sockaddr_in cliaddr = {0};
+    socklen_t socklen = sizeof(struct sockaddr_in);
+    int connfd = accept(m_listen_fd, (struct sockaddr *)&cliaddr, &socklen);
+    // 发生错误，跳出循环...
+    if( connfd < 0 )
+      break;
+    // eqoll队列超过最大值，关闭，继续...
+    if( m_max_event >= MAX_EPOLL_SIZE ) {
+      log_trace("too many connection, more than %d", MAX_EPOLL_SIZE);
+      close(connfd);
+      break; 
+    }
+    // set none blocking for the new client socket => error not close... 
+    if( this->SetNonBlocking(connfd) < 0 ) {
+      log_trace("client SetNonBlocking error fd: %d", connfd);
+    }
+    // 添加新socket到epoll事件池 => 只加入读取事件...
+    struct epoll_event evClient = {0};
+    evClient.events = EPOLLIN | EPOLLET;
+    evClient.data.fd = connfd;
+    // 添加失败，记录，继续...
+    if( epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, connfd, &evClient) < 0 ) {
+      log_trace("add socket '%d' to epoll failed: %s", connfd, strerror(errno));
+      close(connfd);
+      break;
+    }
+    int nSinPort = ntohs(cliaddr.sin_port);
+    string strSinAddr = inet_ntoa(cliaddr.sin_addr);
+    // 进入线程互斥保护...
+    pthread_mutex_lock(&m_mutex);
+    // 创建客户端对象,并保存到集合当中...
+    CTCPClient * lpTCPClient = new CTCPClient(this, connfd, nSinPort, strSinAddr);
+    m_MapConnect[connfd] = lpTCPClient;
+    // 退出线程互斥保护...
+    pthread_mutex_unlock(&m_mutex);
+  }
+}
+
+void CTCPThread::doIncreaseClient(int inSinPort, string & strSinAddr)
+{
+  // 累加最大事件数和已连接用户数，并打印出来...
+  ++m_accept_count; ++m_max_event;
+  log_trace("client accept-count(%d), max-event(%d) - increase, accept from %s:%d",
+             m_accept_count, m_max_event, strSinAddr.c_str(), inSinPort);
+}
+
+void CTCPThread::doDecreaseClient(int inSinPort, string & strSinAddr)
+{
+  // 打印已连接用户数和最大事件数...
+  --m_accept_count; --m_max_event;
+  log_trace("client accept-count(%d), max-event(%d) - decrease, accept from %s:%d",
+             m_accept_count, m_max_event, strSinAddr.c_str(), inSinPort);
 }
 
 void CTCPThread::Entry()
@@ -219,10 +303,10 @@ void CTCPThread::Entry()
   log_trace("tcp-server startup, port %d, max-connection is %d, backlog is %d", DEF_TCP_PORT, MAX_EPOLL_SIZE, MAX_LISTEN_SIZE);
   // 进入epoll线程循环过程...
   time_t myStartTime = time(NULL);
-	int curfds = 1, acceptCount = 0;
   while( !this->IsStopRequested() ) {
-    // 等待epoll事件，直到超时...
-    int nfds = epoll_wait(m_epoll_fd, m_events, curfds, WAIT_TIME_OUT);
+    // 注意：m_max_event 必须大于0，否则会发生 EINVAL 错误，导致线程退出...
+    // 等待epoll事件，直到超时，设定为1秒超时...
+    int nfds = epoll_wait(m_epoll_fd, m_events, m_max_event, 1000);
     // 发生错误，EINTR这个错误，不能退出...
 		if( nfds == -1 ) {
       log_trace("epoll_wait error(code:%d, %s)", errno, strerror(errno));
@@ -253,51 +337,11 @@ void CTCPThread::Entry()
       // 处理服务器socket事件...
       int nCurEventFD = m_events[n].data.fd;
 			if( nCurEventFD == m_listen_fd ) {
-        // 这里要循环accept链接，可能会有多个链接同时到达...
-        while( true ) {
-          // 收到客户端连接的socket...
-          struct sockaddr_in cliaddr = {0};
-          socklen_t socklen = sizeof(struct sockaddr_in);
-          int connfd = accept(m_listen_fd, (struct sockaddr *)&cliaddr, &socklen);
-          // 发生错误，跳出循环...
-          if( connfd < 0 )
-            break;
-          // eqoll队列超过最大值，关闭，继续...
-          if( curfds >= MAX_EPOLL_SIZE ) {
-            log_trace("too many connection, more than %d", MAX_EPOLL_SIZE);
-            close(connfd);
-            break; 
-          }
-          // set none blocking for the new client socket => error not close... 
-          if( this->SetNonBlocking(connfd) < 0 ) {
-            log_trace("client SetNonBlocking error fd: %d", connfd);
-          }
-          // 添加新socket到epoll事件池 => 只加入读取事件...
-          struct epoll_event evClient = {0};
-          evClient.events = EPOLLIN | EPOLLET;
-          evClient.data.fd = connfd;
-          // 添加失败，记录，继续...
-          if( epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, connfd, &evClient) < 0 ) {
-            log_trace("add socket '%d' to epoll failed: %s", connfd, strerror(errno));
-            close(connfd);
-            break;
-          }
-          // 全部成功，打印信息，引用计数增加...
-          ++curfds; ++acceptCount;
-          int nSinPort = ntohs(cliaddr.sin_port);
-          string strSinAddr = inet_ntoa(cliaddr.sin_addr);
-          //log_trace("client count(%d) - increase, accept from %s:%d", acceptCount, strSinAddr.c_str(), nSinPort);
-          // 进入线程互斥保护...
-          pthread_mutex_lock(&m_mutex);
-          // 创建客户端对象,并保存到集合当中...
-          CTCPClient * lpTCPClient = new CTCPClient(this, connfd, nSinPort, strSinAddr);
-          m_MapConnect[connfd] = lpTCPClient;
-          // 退出线程互斥保护...
-          pthread_mutex_unlock(&m_mutex);  
-        }
+        // 处理监听套接字事件...
+        this->doTCPListenEvent();
       } else if( nCurEventFD == m_lpTCPCenter->GetConnFD() ) {
         // 响应中心套接字事件的处理过程...
-        m_lpTCPCenter->doEpollEvent(m_events[n].events);
+        this->doTCPCenterEvent(m_events[n].events);
      } else {
         // 注意：套接字的读写命令，没有用线程保护...
         // 注意：目的是为了防止UDP删除命令先到达造成的互锁问题...
@@ -321,24 +365,19 @@ void CTCPThread::Entry()
             delete m_MapConnect[nCurEventFD];
             m_MapConnect.erase(nCurEventFD);
           }
-          // 关闭连接，减少引用，打印事件...
+          // 关闭套接字..
           close(nCurEventFD);
-          --curfds; --acceptCount;
-          //log_trace("client count(%d) - decrease", acceptCount);
           // 退出线程互斥保护 => 套接字被删除...
           pthread_mutex_unlock(&m_mutex);  
         }
       }
     }
   }
-  // clear all the connected client...
-  this->clearAllClient();
-  // clear all create room...
-  this->clearAllRoom();
-  // close listen socket and exit...
+  // 打印TCP线程退出信息...
   log_trace("tcp-thread exit.");
-  close(m_listen_fd);
-  m_listen_fd = 0;
+  ////////////////////////////////////////////////////////////////////
+  // 注意：房间对象和终端对象的删除，放在了析构函数当中...
+  ////////////////////////////////////////////////////////////////////
 }
 //
 // 删除所有的房间对象列表...
@@ -346,7 +385,8 @@ void CTCPThread::clearAllRoom()
 {
   GM_MapTCPRoom::iterator itorRoom;
   for(itorRoom = m_MapTCPRoom.begin(); itorRoom != m_MapTCPRoom.end(); ++itorRoom) {
-    delete itorRoom->second;
+    CTCPRoom * lpTCPRoom = itorRoom->second;
+    delete lpTCPRoom; lpTCPRoom = NULL;
   }
   m_MapTCPRoom.clear();  
 }
@@ -356,7 +396,8 @@ void CTCPThread::clearAllClient()
 {
   GM_MapTCPConn::iterator itorItem;
   for(itorItem = m_MapConnect.begin(); itorItem != m_MapConnect.end(); ++itorItem) {
-    delete itorItem->second;
+    CTCPClient * lpTCPClient = itorItem->second;
+    delete lpTCPClient; lpTCPClient = NULL;
   }
   m_MapConnect.clear();
 }

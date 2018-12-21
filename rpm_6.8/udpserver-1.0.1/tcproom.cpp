@@ -70,7 +70,7 @@ void CTCPRoom::doCreateStudent(CTCPClient * lpStudent)
   // 将学生观看到更新到观看列表...
   m_MapTCPStudent[nConnFD] = lpStudent;
   // 获取TCP线程对象，转发计数器变化通知...
-  GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_AddStudent, m_nRoomID);
+  GetApp()->doTCPRoomCommand(kCmd_UdpServer_AddStudent, m_nRoomID);
 }
 
 // 注意：这里还需要删除与这个学生端相关的在线摄像头对象...
@@ -96,7 +96,7 @@ void CTCPRoom::doDeleteStudent(CTCPClient * lpStudent)
   if( itorItem != m_MapTCPStudent.end() ) {
     m_MapTCPStudent.erase(itorItem);
     // 获取TCP线程对象，转发计数器变化通知...
-    GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_DelStudent, m_nRoomID);
+    GetApp()->doTCPRoomCommand(kCmd_UdpServer_DelStudent, m_nRoomID);
     return;
   }
   // 如果通过FD方式没有找到，通过指针遍历查找...
@@ -106,7 +106,7 @@ void CTCPRoom::doDeleteStudent(CTCPClient * lpStudent)
     if(itorItem->second == lpStudent) {
       m_MapTCPStudent.erase(itorItem);
       // 获取TCP线程对象，转发计数器变化通知...
-      GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_DelStudent, m_nRoomID);
+      GetApp()->doTCPRoomCommand(kCmd_UdpServer_DelStudent, m_nRoomID);
       return;
     }
     // 2018.09.12 - by jackey => 造成过严重问题...
@@ -127,7 +127,7 @@ void CTCPRoom::doCreateTeacher(CTCPClient * lpTeacher)
   // 注意：这里只有当讲师端为空时，才发送通知，否则，会造成计数器增加，造成后续讲师端无法登陆的问题...
   // 只有当讲师端对象为空时，才转发计数器变化通知...
   if( m_lpTCPTeacher == NULL ) {
-    GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_AddTeacher, m_nRoomID);
+    GetApp()->doTCPRoomCommand(kCmd_UdpServer_AddTeacher, m_nRoomID);
   }
   // 保存讲师端连接对象...
   m_lpTCPTeacher = lpTeacher;
@@ -139,7 +139,7 @@ void CTCPRoom::doDeleteTeacher(CTCPClient * lpTeacher)
   if( m_lpTCPTeacher == lpTeacher ) {
     m_lpTCPTeacher = NULL;
     // 获取TCP线程对象，转发计数器变化通知...
-    GetApp()->GetTCPThread()->doRoomCommand(kCmd_UdpServer_DelTeacher, m_nRoomID);
+    GetApp()->doTCPRoomCommand(kCmd_UdpServer_DelTeacher, m_nRoomID);
     return;
   }
 }

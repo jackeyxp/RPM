@@ -3,18 +3,21 @@
 #include "room.h"
 #include "student.h"
 #include "teacher.h"
+#include "udpthread.h"
 
-CStudent::CStudent(uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t inHostPort)
+CStudent::CStudent(CUDPThread * lpUDPThread, uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t inHostPort)
   : CNetwork(tmTag, idTag, inHostAddr, inHostPort)
+  , m_lpUDPThread(lpUDPThread)
 {
+  assert(m_lpUDPThread != NULL);
   // 打印学生端被创建信息...
-  log_trace("[Student-Create] HostPort: %d, tmTag: %s, idTag: %s", inHostPort, get_tm_tag(tmTag), get_id_tag(idTag));
+  log_trace("[UDP-Student-Create] HostPort: %d, tmTag: %s, idTag: %s", inHostPort, get_tm_tag(tmTag), get_id_tag(idTag));
 }
 
 CStudent::~CStudent()
 {
   // 打印学生端被删除信息...
-  log_trace("[Student-Delete] HostPort: %d, tmTag: %s, idTag: %s, LiveID: %d", 
+  log_trace("[UDP-Student-Delete] HostPort: %d, tmTag: %s, idTag: %s, LiveID: %d", 
             this->GetHostPort(), get_tm_tag(this->GetTmTag()), 
             get_id_tag(this->GetIdTag()), this->GetDBCameraID());
   // 在房间中注销本学生端对象...
@@ -23,7 +26,7 @@ CStudent::~CStudent()
   }
   // 如果是观看端，把自己从丢包队列当中删除掉...
   if( this->GetIdTag() == ID_TAG_LOOKER ) {
-    GetApp()->doDelLoseForStudent(this);
+    m_lpUDPThread->doDelLoseForStudent(this);
   }
   // 打印学生端所在的房间信息...
   if( m_lpRoom != NULL ) {
@@ -77,10 +80,9 @@ bool CStudent::doTagCreate(char * lpBuffer, int inBufSize)
   // 注意：学生推流者和学生观看者处理方式会有不同...
   //////////////////////////////////////////////////////
   bool bResult = false;
-  CApp * lpApp = GetApp();
   // 更新创建命令包内容，创建或更新房间，更新房间里的学生端...
   memcpy(&m_rtp_create, lpBuffer, sizeof(m_rtp_create));
-  m_lpRoom = lpApp->doCreateRoom(m_rtp_create.roomID);
+  m_lpRoom = m_lpUDPThread->doCreateRoom(m_rtp_create.roomID);
   m_lpRoom->doCreateStudent(this);
   // 回复学生推流端 => 房间已经创建成功，不要再发创建命令了...
   if( this->GetIdTag() == ID_TAG_PUSHER ) {
@@ -158,7 +160,7 @@ bool CStudent::doCreateForLooker(char * lpBuffer, int inBufSize)
 
 bool CStudent::doTagDelete(char * lpBuffer, int inBufSize)
 {
-  // 注意：删除命令已经在CApp::doTagDelete()中拦截处理了...
+  // 注意：删除命令已经在CUDPThread::doTagDelete()中拦截处理了...
   return true;
 }
 
@@ -221,7 +223,7 @@ bool CStudent::doTagSupply(char * lpBuffer, int inBufSize)
   if( theMapLose.size() <= 0 )
     return true;
   // 把自己加入到丢包对象列表当中...
-  GetApp()->doAddLoseForStudent(this);
+  m_lpUDPThread->doAddLoseForStudent(this);
   // 打印已收到补包命令...
   //log_trace("[Student-Looker] Supply Recv => Count: %d, Type: %d", rtpSupply.suSize / sizeof(int), rtpSupply.suType);
   return true;

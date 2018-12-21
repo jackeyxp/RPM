@@ -24,12 +24,13 @@ CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nHostPort, stri
   assert(m_lpTCPThread != NULL);
   m_nStartTime = time(NULL);
   m_epoll_fd = m_lpTCPThread->GetEpollFD();
+  m_lpTCPThread->doIncreaseClient(nHostPort, strSinAddr);
 }
 
 CTCPClient::~CTCPClient()
 {
   // 打印终端退出信息...
-  log_trace("Client Delete: %s, From: %s:%d, Socket: %d", get_client_type(m_nClientType), 
+  log_trace("TCPClient Delete: %s, From: %s:%d, Socket: %d", get_client_type(m_nClientType), 
             this->m_strSinAddr.c_str(), this->m_nHostPort, this->m_nConnFD);
   // 如果是学生端，从房间当中删除之...
   if( m_lpTCPRoom != NULL && m_nClientType == kClientStudent ) {
@@ -39,6 +40,8 @@ CTCPClient::~CTCPClient()
   if( m_lpTCPRoom != NULL && m_nClientType == kClientTeacher ) {
     m_lpTCPRoom->doDeleteTeacher(this);
   }
+  // 打印终端退出后剩余的链接数量...
+  m_lpTCPThread->doDecreaseClient(this->m_nHostPort, this->m_strSinAddr);
 }
 //
 // 发送网络数据 => 始终设置读事件...
@@ -103,6 +106,15 @@ int CTCPClient::ForRead()
 		// 已获取的数据长度不够，直接返回，等待新数据...
 		if( nDataSize < lpCmdHeader->m_pkg_len )
 			return 0;
+    // 注意：两个命令累加在一起就会发生数据粘滞...
+    // 注意：数据粘滞不处理，会造成json解析失败，当数据包有效时，才处理...
+    // 注意：数据粘滞的现象，就是字符串的最后一个字符不是\0，造成json解析失败...
+    if( lpCmdHeader->m_pkg_len > 0 ) {
+      memset(bufRead, 0, MAX_LINE_SIZE);
+      memcpy(bufRead, lpDataPtr, lpCmdHeader->m_pkg_len);
+      // json数据的头指针使用新的缓存指针...
+      lpDataPtr = bufRead;
+    }
     // 数据区有效，保存用户类型...
     m_nClientType = lpCmdHeader->m_type;
     assert( nDataSize >= lpCmdHeader->m_pkg_len );
@@ -116,7 +128,7 @@ int CTCPClient::ForRead()
     }
     // 打印调试信息到控制台，播放器类型，命令名称，IP地址端口，套接字...
     // 调试模式 => 只打印，不存盘到日志文件...
-    log_trace("Client Command(%s - %s, From: %s:%d, Socket: %d)", 
+    log_trace("TCPClient Command(%s - %s, From: %s:%d, Socket: %d)", 
               get_client_type(m_nClientType), get_command_name(lpCmdHeader->m_cmd),
               this->m_strSinAddr.c_str(), this->m_nHostPort, this->m_nConnFD);
     // 对数据进行用户类型分发...
@@ -285,7 +297,7 @@ void CTCPClient::doUDPStudentPusherOnLine(int inDBCameraID, bool bIsOnLineFlag)
 }
 
 // 将相关联的UDP终端退出的事件转发给TCP终端连接对象...
-void CTCPClient::doLogoutForUDP(int nDBCameraID, uint8_t tmTag, uint8_t idTag)
+void CTCPClient::doUDPLogoutToTCP(int nDBCameraID, uint8_t tmTag, uint8_t idTag)
 {
   // 构造转发JSON数据块 => UDP的终端类型和身份类型 => tmTag | idTag...
   json_object * new_obj = json_object_new_object();

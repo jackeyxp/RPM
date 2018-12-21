@@ -1,137 +1,333 @@
 
 #include "app.h"
-#include "room.h"
 #include "getopt.h"
-#include "student.h"
-#include "teacher.h"
 #include "tcpthread.h"
+#include "udpthread.h"
 #include <ifaddrs.h>
 #include <netdb.h>
+#include <signal.h>
 
 CApp::CApp()
   : m_listen_fd(0)
-  , m_sem_t(NULL)
   , m_lpTCPThread(NULL)
+  , m_lpUDPThread(NULL)
+  , m_signal_quit(false)
   , m_bIsDebugMode(false)
 {
-  // 初始化线程互斥对象...
-  pthread_mutex_init(&m_mutex, NULL);
-  // 初始化辅助线程信号量...
-  os_sem_init(&m_sem_t, 0);
 }
 
 CApp::~CApp()
 {
-  // 等待线程退出...
-  this->StopAndWaitForThread();
-  // 删除TCP线程对象...
-  if (m_lpTCPThread != NULL) {
-    delete m_lpTCPThread;
-    m_lpTCPThread = NULL;
-  }
-  // 先关闭套接字，阻止网络数据到达...
-  if( m_listen_fd > 0 ) {
-    close(m_listen_fd);
-    m_listen_fd = 0;
-  }
-  // 释放房间资源...
-  GM_MapRoom::iterator itorRoom;
-  for(itorRoom = m_MapRoom.begin(); itorRoom != m_MapRoom.end(); ++itorRoom) {
-    delete itorRoom->second;
-  }
-  // 释放网络对象资源...
-  GM_MapNetwork::iterator itorItem;
-  for(itorItem = m_MapNetwork.begin(); itorItem != m_MapNetwork.end(); ++itorItem) {
-    delete itorItem->second;
-  }
-  // 删除线程互斥对象...
-  pthread_mutex_destroy(&m_mutex);
-  // 释放辅助线程信号量...
-  os_sem_destroy(m_sem_t);
+  // 释放所有的资源对象...
+  this->clearAllSource();
 }
 
 // 调用位置，详见 udpserver.c::main() 函数，只调用一次...
-void CApp::doProcessCmdLine(int argc, char * argv[])
+bool CApp::doProcessCmdLine(int argc, char * argv[])
 {
-	int	ch = 0;
-	while ((ch = getopt(argc, argv, "?hvdr")) != EOF)
-	{
-		switch (ch) {
-		case 'd': m_bIsDebugMode = true;  break;
-		case 'r': m_bIsDebugMode = false; break;
-		case '?':
-		case 'h':
-		case 'v':
-			log_trace("-d: Run as Debug Mode => mount on Debug student and Debug teacher.");
-			log_trace("-r: Run as Release Mode => mount on Release student and Debug teacher.");
-			break;
-		}
-	}
+  int	 ch = 0;
+  bool bExitFlag = false;
+  while ((ch = getopt(argc, argv, "?hvdrs")) != EOF)
+  {
+    switch (ch)
+    {
+    case 'd':
+      m_bIsDebugMode = true;
+      break;
+    case 'r':
+      m_bIsDebugMode = false;
+      break;
+    case 's':
+      this->doStopSignal();
+      bExitFlag = true;
+      break;
+    case '?':
+    case 'h':
+    case 'v':
+      log_trace("-d: Run as Debug Mode => mount on Debug student and Debug teacher.");
+      log_trace("-r: Run as Release Mode => mount on Release student and Debug teacher.");
+      log_trace("-s: Send SIG signal to shutdown udpserver.");
+      bExitFlag = true;
+      break;
+    }
+  }
+  return bExitFlag;
 }
 
-void CApp::doLogoutForUDP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag)
+void CApp::doStopSignal()
 {
-  if( m_lpTCPThread == NULL )
+  // 打印正在停止进程提示信息...
+  log_trace("stoping udpserver...");
+  // 从pid文件中读取pid的值...
+  int pid = this->read_pid_file();
+  // pid无效，直接返回...
+  if( pid < 0 )
     return;
-  m_lpTCPThread->doLogoutForUDP(nTCPSockFD, nDBCameraID, tmTag, idTag);
+  // 发送程序正常结束信号...
+  if( kill(pid, SIGTERM) != -1 ) {
+    log_trace("udpserver stopped by SIGTERM, pid=%d", pid);
+    return;
+  }
+  // 发送程序强制结束信号...
+  if( kill(pid, SIGKILL) != -1 ) {
+    log_trace("udpserver stopped by SIGKILL, pid=%d", pid);
+    return;
+  }
+  // 无法结束指定的进程...
+  log_trace("udpserver can't be stop, pid=%d", pid);
+}
+
+bool CApp::check_pid_file()
+{
+  // 如果没有读取到pid，返回true...
+  int pid = this->read_pid_file();
+  if( pid <= 0 ) return true;
+  // 读取到了pid文件，打印信息，返回false...
+  log_trace("udpserver is running, pid=%d", pid);
+  return false;
+}
+
+int CApp::read_pid_file()
+{
+  char pid_path[256] = {0};
+  sprintf(pid_path, "%s%s", get_abs_path(), DEFAULT_PID_FILE);
+  int fd = open(pid_path, O_RDONLY, S_IRWXU | S_IRGRP | S_IROTH);
+  if( fd < 0 ) {
+    log_trace("open pid file %s error, ret=%#x", pid_path, errno);
+    return -1;
+  }
+  int  pid   = -1;
+  int  nRead = -1;
+  char buf[256] = {0};
+  do {
+    // 移动文件到最前面...
+    if( lseek(fd, 0, SEEK_SET) < 0 ) {
+      log_trace("lseek pid file %s error, ret=%d", pid_path, errno);
+      break;
+    }
+    // 读取pid文件内容...
+    if( (nRead = read(fd, buf, 256)) < 0 ) {
+      log_trace("read from file %s failed. ret=%d", pid_path, errno);
+      break;
+    }
+    // 转换字符串为数字...
+    if( (pid = atoi(buf)) <= 0 ) {
+      log_trace("read from file %s failed. error=%s", pid_path, buf);
+      break;
+    }
+  } while( false );
+  // 关闭文件句柄对象...
+  close(fd); fd = -1;
+  // 返回读取到的pid值...
+  return pid;
+}
+
+bool CApp::destory_pid_file()
+{
+  char pid_path[256] = {0};
+  sprintf(pid_path, "%s%s", get_abs_path(), DEFAULT_PID_FILE);
+  if( unlink(pid_path) < 0 ) {
+    log_trace("unlink pid file %s error, ret=%d", pid_path, errno);
+  }
+  //log_trace("unlink pid file %s success.", pid_path);
+  return true;
+}
+
+bool CApp::acquire_pid_file()
+{
+  char pid_path[256] = {0};
+  sprintf(pid_path, "%s%s", get_abs_path(), DEFAULT_PID_FILE);
+
+  // -rw-r--r-- 
+  // 644
+  int mode = S_IRUSR | S_IWUSR |  S_IRGRP | S_IROTH;
+  
+  int fd = -1;
+  // open pid file
+  if ((fd = ::open(pid_path, O_WRONLY | O_CREAT, mode)) < 0) {
+    log_trace("open pid file %s error, ret=%#x", pid_path, errno);
+    return false;
+  }
+  
+  // require write lock
+  struct flock lock;
+
+  lock.l_type = F_WRLCK; // F_RDLCK, F_WRLCK, F_UNLCK
+  lock.l_start = 0; // type offset, relative to l_whence
+  lock.l_whence = SEEK_SET;  // SEEK_SET, SEEK_CUR, SEEK_END
+  lock.l_len = 0;
+  
+  if (fcntl(fd, F_SETLK, &lock) < 0) {
+    if(errno == EACCES || errno == EAGAIN) {
+      log_trace("udpserver is already running! ret=%#x", errno);
+      ::close(fd); fd = -1;
+      return false;
+    }
+    log_trace("require lock for file %s error! ret=%#x", pid_path, errno);
+    ::close(fd); fd = -1;
+    return false;
+  }
+
+  // truncate file
+  if (ftruncate(fd, 0) < 0) {
+    log_trace("truncate pid file %s error! ret=%#x", pid_path, errno);
+    ::close(fd); fd = -1;
+    return false;
+  }
+
+  int pid = (int)getpid();
+  
+  // write the pid
+  char buf[256] = {0};
+  snprintf(buf, sizeof(buf), "%d", pid);
+  if (write(fd, buf, strlen(buf)) != (int)strlen(buf)) {
+    log_trace("write our pid error! pid=%d file=%s ret=%#x", pid, pid_path, errno);
+    ::close(fd); fd = -1;
+    return false;
+  }
+
+  // auto close when fork child process.
+  int val = 0;
+  if ((val = fcntl(fd, F_GETFD, 0)) < 0) {
+    log_trace("fnctl F_GETFD error! file=%s ret=%#x", pid_path, errno);
+    ::close(fd); fd = -1;
+    return false;
+  }
+  val |= FD_CLOEXEC;
+  if (fcntl(fd, F_SETFD, val) < 0) {
+    log_trace("fcntl F_SETFD error! file=%s ret=%#x", pid_path, errno);
+    ::close(fd); fd = -1;
+    return false;
+  }
+  
+  log_trace("write pid=%d to %s success!", pid, pid_path);
+  ::close(fd); fd = -1;
+  
+  return true;
+}
+
+bool CApp::IsUDPTeacherPusherOnLine(int inRoomID)
+{
+  if( m_lpUDPThread == NULL && this->IsSignalQuit() )
+    return false;
+  return m_lpUDPThread->IsUDPTeacherPusherOnLine(inRoomID);
+}
+
+bool CApp::IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID)
+{
+  if( m_lpUDPThread == NULL && this->IsSignalQuit() )
+    return false;
+  return m_lpUDPThread->IsUDPStudentPusherOnLine(inRoomID, inDBCameraID);
+}
+
+void CApp::doDeleteForCameraLiveStop(int inRoomID)
+{
+  if( m_lpUDPThread == NULL && this->IsSignalQuit() )
+    return;
+  return m_lpUDPThread->doDeleteForCameraLiveStop(inRoomID);
+}
+
+int CApp::doTCPRoomCommand(int nCmdID, int nRoomID)
+{
+  if( m_lpTCPThread == NULL && this->IsSignalQuit() )
+    return -1;
+  return m_lpTCPThread->doRoomCommand(nCmdID, nRoomID);
+}
+
+void CApp::doUDPLogoutToTCP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag)
+{
+  if( m_lpTCPThread == NULL && this->IsSignalQuit() )
+    return;
+  m_lpTCPThread->doUDPLogoutToTCP(nTCPSockFD, nDBCameraID, tmTag, idTag);
 }
 
 void CApp::doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag)
 {
-  if( m_lpTCPThread == NULL )
+  if( m_lpTCPThread == NULL && this->IsSignalQuit() )
     return;
   m_lpTCPThread->doUDPStudentPusherOnLine(inRoomID, inDBCameraID, bIsOnLineFlag);
 }
 
 void CApp::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
 {
-  if( m_lpTCPThread == NULL )
+  if( m_lpTCPThread == NULL && this->IsSignalQuit() )
     return;
   m_lpTCPThread->doUDPTeacherPusherOnLine(inRoomID, bIsOnLineFlag);
 }
 
-bool CApp::IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID)
+void CApp::doWaitUdpSocket()
 {
-  // 首先进行线程互斥...
-  pthread_mutex_lock(&m_mutex);
-  bool bOnLine = false;
-  CRoom * lpRoom = NULL;
-  CStudent * lpStudent = NULL;
-  GM_MapRoom::iterator itorRoom;
-  do {
-    itorRoom = m_MapRoom.find(inRoomID);
-    if( itorRoom == m_MapRoom.end() )
+  struct sockaddr_in recvAddr = {0};
+  char recvBuff[MAX_BUFF_LEN] = {0};
+  int nAddrLen = 0, nRecvCount = 0;
+  // 判断是否有信号退出标志...
+  while ( !this->IsSignalQuit() ) {
+    // 从网络层阻塞接收UDP数据报文...
+    bzero(recvBuff, MAX_BUFF_LEN);
+    nAddrLen = sizeof(recvAddr);
+    nRecvCount = recvfrom(m_listen_fd, recvBuff, MAX_BUFF_LEN, 0, (sockaddr*)&recvAddr, (socklen_t*)&nAddrLen);
+    /////////////////////////////////////////////////////////////////////////////////////
+    // 如果返回长度与输入长度一致 => 说明发送端数据越界 => 超过了系统实际处理长度...
+    // 注意：出现这种情况，一定要排查发送端的问题 => 通常是序号越界造成的...
+    /////////////////////////////////////////////////////////////////////////////////////
+    int nMaxSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
+    if( nRecvCount > nMaxSize ) {
+      log_debug("Error Packet Excessed");
+      continue;
+    }
+    // 发生错误，打印并退出...
+    if( nRecvCount <= 0 ) {
+      log_trace("recvfrom error(code:%d, %s)", errno, strerror(errno));
+      // is EINTR or EAGAIN, continue...
+      if( errno == EINTR || errno == EAGAIN ) 
+        continue;
+      // not EINTR or EAGAIN, break...
       break;
-    lpRoom = itorRoom->second; assert(lpRoom != NULL);
-    lpStudent = lpRoom->GetStudentPusher();
-    // 房间里没有学生推流者...
-    if( lpStudent == NULL )
-      break;
-    // 检测学生推流者的通道编号是否与输入的通道编号一致...
-    bOnLine = ((lpStudent->GetDBCameraID() == inDBCameraID) ? true : false);
-  } while( false );
-  // 退出互斥，返回查找结果...
-  pthread_mutex_unlock(&m_mutex);  
-  return bOnLine;  
+    }
+    // 获取发送者映射的地址和端口号 => 后期需要注意端口号变化的问题...
+    uint32_t nHostSinAddr = ntohl(recvAddr.sin_addr.s_addr);
+    uint16_t nHostSinPort = ntohs(recvAddr.sin_port);
+    // 将网络接收到的数据包投递给UDP处理线程...
+    if( m_lpUDPThread != NULL ) {
+      m_lpUDPThread->onRecvEvent(nHostSinAddr, nHostSinPort, recvBuff, nRecvCount);
+    }
+  }
+  // 预先释放所有分配的线程和资源...
+  this->clearAllSource();
+  // 删除相关联的pid文件...
+  this->destory_pid_file();
+  // 打印已经成功退出信息...
+  log_trace("cleanup for gracefully terminate.");
 }
 
-bool CApp::IsUDPTeacherPusherOnLine(int inRoomID)
+void CApp::clearAllSource()
 {
-  // 首先进行线程互斥...
-  pthread_mutex_lock(&m_mutex);
-  bool bOnLine = false;
-  CRoom * lpRoom = NULL;
-  GM_MapRoom::iterator itorRoom;
-  do {
-    itorRoom = m_MapRoom.find(inRoomID);
-    if( itorRoom == m_MapRoom.end() )
-      break;
-    lpRoom = itorRoom->second; assert(lpRoom != NULL);
-    bOnLine = ((lpRoom->GetTeacherPusher() != NULL) ? true : false);
-  } while( false );
-  // 退出互斥，返回查找结果...
-  pthread_mutex_unlock(&m_mutex);  
-  return bOnLine;
+  // 删除TCP线程对象...
+  if (m_lpTCPThread != NULL) {
+    delete m_lpTCPThread;
+    m_lpTCPThread = NULL;
+  }
+  // 删除UDP线程对象...
+  if (m_lpUDPThread != NULL) {
+    delete m_lpUDPThread;
+    m_lpUDPThread = NULL;
+  }
+  // 先关闭套接字，阻止网络数据到达...
+  if( m_listen_fd > 0 ) {
+    close(m_listen_fd);
+    m_listen_fd = 0;
+  }  
+}
+
+void CApp::onSignalQuit()
+{
+  // 先关闭套接字，迫使线程退出...
+  if( m_listen_fd > 0 ) {
+    close(m_listen_fd);
+    m_listen_fd = 0;
+  }
+  // 再设置退出标志...
+  m_signal_quit = true;
 }
 
 bool CApp::doStartThread()
@@ -143,52 +339,142 @@ bool CApp::doStartThread()
     log_trace("Init TCPThread failed!");
     return false;
   }
-  // 启动自身附加线程...
-  this->Start();
+  // 创建UDP数据线程，并启动线程...
+  assert(m_lpUDPThread == NULL);
+  m_lpUDPThread = new CUDPThread();
+  if (!m_lpUDPThread->InitThread()) {
+    log_trace("Init UDPThread failed!");
+    return false;
+  }
   return true;
 }
 
-void CApp::doAddSupplyForTeacher(CTeacher * lpTeacher)
+bool CApp::doInitRLimit()
 {
-  // 注意：是从doProcSocket()过来的，已经做了互斥处理...
-  GM_ListTeacher::iterator itorItem;
-  itorItem = std::find(m_ListTeacher.begin(), m_ListTeacher.end(), lpTeacher);
-  // 如果对象已经存在列表当中，直接返回...
-  if( itorItem != m_ListTeacher.end() )
-    return;
-  // 对象没有在列表当中，放到列表尾部...
-  m_ListTeacher.push_back(lpTeacher);
-  // 通知线程信号量状态发生改变...
-  os_sem_post(m_sem_t);
+	// set max open file number for one process...
+	struct rlimit rt = {0};
+	rt.rlim_max = rt.rlim_cur = MAX_OPEN_FILE;
+	if( setrlimit(RLIMIT_NOFILE, &rt) == -1 ) {
+    log_trace("setrlimit error(%s)", strerror(errno));
+		return false;
+	}
+  return true;
 }
 
-void CApp::doDelSupplyForTeacher(CTeacher * lpTeacher)
+int CApp::doCreateUdpSocket()
 {
-  // 注意：是从doProcSocket()过来的，已经做了互斥处理...
-  m_ListTeacher.remove(lpTeacher);
+  // 获取UDP监听端口配置...
+  int nUdpPort = this->GetUdpPort();
+  // 创建UDP监听套接字...
+  int listen_fd = socket(AF_INET, SOCK_DGRAM, 0); 
+  if( listen_fd < 0 ) {
+    log_trace("can't create udp socket");
+    return -1;
+  }
+  // 2018.12.17 - by jackey => 用同步模式...
+  // 设置异步UDP套接字 => 失败，关闭套接字...
+  //if( fcntl(listen_fd, F_SETFL, fcntl(listen_fd, F_GETFD, 0)|O_NONBLOCK) == -1 ) {
+  //  log_trace("O_NONBLOCK error: %s", strerror(errno));
+  //  close(listen_fd);
+  //  return -1;
+  //}
+ 	int opt = 1;
+  // 设置地址重用 => 失败，关闭套接字...
+  if( setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) != 0 ) {
+    log_trace("SO_REUSEADDR error: %s", strerror(errno));
+    close(listen_fd);
+    return -1;
+  }
+  // 设置端口重用 => 失败，关闭套接字...
+  if( setsockopt(listen_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) != 0 ) {
+    log_trace("SO_REUSEPORT error: %s", strerror(errno));
+    close(listen_fd);
+    return -1;
+  }
+  // 设定发送和接收缓冲最大值...
+  int nRecvMaxLen = 256 * 1024;
+  int nSendMaxLen = 256 * 1024;
+  // 设置接收缓冲区...
+  if( setsockopt(listen_fd, SOL_SOCKET, SO_RCVBUF, &nRecvMaxLen, sizeof(nRecvMaxLen)) != 0 ) {
+    log_trace("SO_RCVBUF error: %s", strerror(errno));
+    close(listen_fd);
+    return -1;
+  }
+  // 设置发送缓冲区...
+  if( setsockopt(listen_fd, SOL_SOCKET, SO_SNDBUF, &nSendMaxLen, sizeof(nSendMaxLen)) != 0 ) {
+    log_trace("SO_SNDBUF error: %s", strerror(errno));
+    close(listen_fd);
+    return -1;
+  }
+  // 准备绑定地址结构体...
+  struct sockaddr_in udpAddr = {0};
+  bzero(&udpAddr, sizeof(udpAddr));
+  udpAddr.sin_family = AF_INET; 
+  udpAddr.sin_port = htons(nUdpPort);
+  udpAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  // 绑定监听端口...
+  if( bind(listen_fd, (struct sockaddr *)&udpAddr, sizeof(struct sockaddr)) == -1 ) {
+    log_trace("bind udp port: %d, error: %s", nUdpPort, strerror(errno));
+    close(listen_fd);
+    return -1;
+  }
+  // 返回已经绑定完毕的UDP套接字...
+  m_listen_fd = listen_fd;
+  return m_listen_fd;
 }
 
-void CApp::doAddLoseForStudent(CStudent * lpStudent)
+// 注意：阿里云专有网络无法获取外网地址，中心服务器可以同链接获取外网地址...
+// 因此，这个接口作废了，不会被调用，而是让中心服务器通过链接地址自动获取...
+bool CApp::doInitWanAddr()
 {
-  // 注意：是从doProcSocket()过来的，已经做了互斥处理...
-  GM_ListStudent::iterator itorItem;
-  itorItem = std::find(m_ListStudent.begin(), m_ListStudent.end(), lpStudent);
-  // 如果对象已经存在列表当中，直接返回...
-  if( itorItem != m_ListStudent.end() )
-    return;
-  // 对象没有在列表当中，放到列表尾部...
-  m_ListStudent.push_back(lpStudent);
-  // 通知线程信号量状态发生改变...
-  os_sem_post(m_sem_t);
+  struct ifaddrs *ifaddr, *ifa;
+  char host_ip[NI_MAXHOST] = {0};
+  int family, result, is_ok = 0;
+  if( getifaddrs(&ifaddr) == -1) {
+    return false;
+  }
+  for( ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next ) { 
+    if( ifa->ifa_addr == NULL )
+      continue;
+    family = ifa->ifa_addr->sa_family;
+    if( family != AF_INET )
+      continue;
+    result = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host_ip, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+    if( result != 0 )
+      continue;
+    // 先排除本机的环路地址...
+    if( strcasecmp(host_ip, "127.0.0.1") == 0 )
+      continue;
+    // 将获取的IP地址进行转换判断...
+    uint32_t nHostAddr = ntohl(inet_addr(host_ip));
+    // 检查是否是以下三类内网地址...
+    // A类：10.0.0.0 ~ 10.255.255.255
+    // B类：172.16.0.0 ~ 172.31.255.255
+    // C类：192.168.0.0 ~ 192.168.255.255
+    if((nHostAddr >= 0x0A000000 && nHostAddr <= 0x0AFFFFFF) ||
+      (nHostAddr >= 0xAC100000 && nHostAddr <= 0xAC1FFFFF) ||
+      (nHostAddr >= 0xC0A80000 && nHostAddr <= 0xC0A8FFFF))
+      continue;
+    // 不是三类内网地址，说明找到了本机的外网地址...
+    is_ok = 1;
+    break;
+  }
+  // 释放资源，没有找到，直接返回...
+  freeifaddrs(ifaddr);
+  if( !is_ok ) {
+    return false;
+  }
+  // 如果汇报地址host_ip为空，打印错误，返回...
+  if( strlen(host_ip) <= 0 ) {
+    log_trace("Error: host_ip is empty ==");
+    return false;
+  }
+  // 保存外网地址...
+  m_strWanAddr = host_ip;
+  return true;
 }
 
-void CApp::doDelLoseForStudent(CStudent * lpStudent)
-{
-  // 注意：是从doProcSocket()过来的，已经做了互斥处理...
-  m_ListStudent.remove(lpStudent);
-}
-
-void CApp::Entry()
+/*void CApp::Entry()
 {
   // 设定默认的信号超时时间 => APP_SLEEP_MS 毫秒...
   unsigned long next_wait_ms = APP_SLEEP_MS;
@@ -327,295 +613,24 @@ void CApp::doCheckTimeout()
   }
   // 线程互斥解锁...
   pthread_mutex_unlock(&m_mutex);
-}
-//
-// 创建房间 => 通过房间号进行创建...
-CRoom * CApp::doCreateRoom(int inRoomID)
+}*/
+
+/*void CApp::doWaitSocket()
 {
-  // 如果找到了房间对象，直接返回...
-  CRoom * lpRoom = NULL;
-  GM_MapRoom::iterator itorRoom = m_MapRoom.find(inRoomID);
-  if( itorRoom != m_MapRoom.end() ) {
-    lpRoom = itorRoom->second;
-    return lpRoom;
+  while (m_listen_fd > 0) {
+    // 设置休息标志 => 只要有发包或收包就不能休息...
+    m_bNeedSleep = true;
+    // 每隔 1 秒服务器向所有终端发起探测命令包...
+    this->doSendDetectCmd();
+    // 每隔 10 秒检测一次对象超时...
+    this->doCheckTimeout();
+    // 接收一个到达的UDP数据包...
+    this->doRecvPacket();
+    // 先发送针对讲师的补包命令...
+    this->doSendSupplyCmd();
+    // 再发送针对学生的丢包命令...
+    this->doSendLoseCmd();
+    // 等待发送或接收下一个数据包...
+    this->doSleepTo();
   }
-  // 如果没有找到房间，创建一个新的房间...
-  lpRoom = new CRoom(inRoomID);
-  m_MapRoom[inRoomID] = lpRoom;
-  return lpRoom;
-}
-
-bool CApp::doInitRLimit()
-{
-	// set max open file number for one process...
-	struct rlimit rt = {0};
-	rt.rlim_max = rt.rlim_cur = MAX_OPEN_FILE;
-	if( setrlimit(RLIMIT_NOFILE, &rt) == -1 ) {
-    log_trace("setrlimit error(%s)", strerror(errno));
-		return false;
-	}
-  return true;
-}
-
-// 注意：阿里云专有网络无法获取外网地址，中心服务器可以同链接获取外网地址...
-// 因此，这个接口作废了，不会被调用，而是让中心服务器通过链接地址自动获取...
-bool CApp::doInitWanAddr()
-{
-  struct ifaddrs *ifaddr, *ifa;
-  char host_ip[NI_MAXHOST] = {0};
-  int family, result, is_ok = 0;
-  if( getifaddrs(&ifaddr) == -1) {
-    return false;
-  }
-  for( ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next ) { 
-    if( ifa->ifa_addr == NULL )
-      continue;
-    family = ifa->ifa_addr->sa_family;
-    if( family != AF_INET )
-      continue;
-    result = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host_ip, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
-    if( result != 0 )
-      continue;
-    // 先排除本机的环路地址...
-    if( strcasecmp(host_ip, "127.0.0.1") == 0 )
-      continue;
-    // 将获取的IP地址进行转换判断...
-    uint32_t nHostAddr = ntohl(inet_addr(host_ip));
-    // 检查是否是以下三类内网地址...
-    // A类：10.0.0.0 ~ 10.255.255.255
-    // B类：172.16.0.0 ~ 172.31.255.255
-    // C类：192.168.0.0 ~ 192.168.255.255
-    if((nHostAddr >= 0x0A000000 && nHostAddr <= 0x0AFFFFFF) ||
-      (nHostAddr >= 0xAC100000 && nHostAddr <= 0xAC1FFFFF) ||
-      (nHostAddr >= 0xC0A80000 && nHostAddr <= 0xC0A8FFFF))
-      continue;
-    // 不是三类内网地址，说明找到了本机的外网地址...
-    is_ok = 1;
-    break;
-  }
-  // 释放资源，没有找到，直接返回...
-  freeifaddrs(ifaddr);
-  if( !is_ok ) {
-    return false;
-  }
-  // 如果汇报地址host_ip为空，打印错误，返回...
-  if( strlen(host_ip) <= 0 ) {
-    log_trace("Error: host_ip is empty ==");
-    return false;
-  }
-  // 保存外网地址...
-  m_strWanAddr = host_ip;
-  return true;
-}
-
-int CApp::doCreateUdpSocket()
-{
-  // 获取UDP监听端口配置...
-  int nUdpPort = this->GetUdpPort();
-  // 创建UDP监听套接字...
-	int listen_fd = socket(AF_INET, SOCK_DGRAM, 0); 
-  if( listen_fd < 0 ) {
-    log_trace("can't create udp socket");
-    return -1;
-  }
- 	int opt = 1;
-  // 设置地址重用 => 失败，关闭套接字...
-  if( setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) != 0 ) {
-    log_trace("SO_REUSEADDR error: %s", strerror(errno));
-    close(listen_fd);
-    return -1;
-  }
-  // 设置端口重用 => 失败，关闭套接字...
-  if( setsockopt(listen_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) != 0 ) {
-    log_trace("SO_REUSEPORT error: %s", strerror(errno));
-    close(listen_fd);
-    return -1;
-  }
-  // 设定发送和接收缓冲最大值...
-  int nRecvMaxLen = 256 * 1024;
-  int nSendMaxLen = 256 * 1024;
-  // 设置接收缓冲区...
-  if( setsockopt(listen_fd, SOL_SOCKET, SO_RCVBUF, &nRecvMaxLen, sizeof(nRecvMaxLen)) != 0 ) {
-    log_trace("SO_RCVBUF error: %s", strerror(errno));
-    close(listen_fd);
-    return -1;
-  }
-  // 设置发送缓冲区...
-  if( setsockopt(listen_fd, SOL_SOCKET, SO_SNDBUF, &nSendMaxLen, sizeof(nSendMaxLen)) != 0 ) {
-    log_trace("SO_SNDBUF error: %s", strerror(errno));
-    close(listen_fd);
-    return -1;
-  }
-  // 准备绑定地址结构体...
-	struct sockaddr_in udpAddr = {0};
-	bzero(&udpAddr, sizeof(udpAddr));
-	udpAddr.sin_family = AF_INET; 
-	udpAddr.sin_port = htons(nUdpPort);
-	udpAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  // 绑定监听端口...
-	if( bind(listen_fd, (struct sockaddr *)&udpAddr, sizeof(struct sockaddr)) == -1 ) {
-    log_trace("bind udp port: %d, error: %s", nUdpPort, strerror(errno));
-    close(listen_fd);
-		return -1;
-	}
-  // 返回已经绑定完毕的UDP套接字...
-  m_listen_fd = listen_fd;
-  return m_listen_fd;
-}
-
-void CApp::doWaitSocket()
-{
-  struct sockaddr_in recvAddr = {0};
-  char recvBuff[MAX_BUFF_LEN] = {0};
-  int nAddrLen = 0, nRecvCount = 0;
-  while ( m_listen_fd > 0 ) {
-    // 从网络层阻塞接收UDP数据报文...
-    bzero(recvBuff, MAX_BUFF_LEN);
-    nAddrLen = sizeof(recvAddr);
-    nRecvCount = recvfrom(m_listen_fd, recvBuff, MAX_BUFF_LEN, 0, (sockaddr*)&recvAddr, (socklen_t*)&nAddrLen);
-    /////////////////////////////////////////////////////////////////////////////////////
-    // 如果返回长度与输入长度一致 => 说明发送端数据越界 => 超过了系统实际处理长度...
-    // 注意：出现这种情况，一定要排查发送端的问题 => 通常是序号越界造成的...
-    /////////////////////////////////////////////////////////////////////////////////////
-    int nMaxSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-    if( nRecvCount > nMaxSize ) {
-      log_debug("Error Packet Excessed");
-      continue;
-    }
-    // 发生错误，打印并退出...
-    if( nRecvCount <= 0 ) {
-      log_trace("recvfrom error(code:%d, %s)", errno, strerror(errno));
-      // is EINTR, continue...
-      if( errno == EINTR ) 
-        continue;
-      // not EINTR, break...
-      assert( errno != EINTR );
-      break;
-    }
-    // 线程互斥锁定...
-    pthread_mutex_lock(&m_mutex);  
-    // 处理网络数据到达事件 => 为了使用线程互斥...
-    this->doProcSocket(recvBuff, nRecvCount, recvAddr);
-    // 线程互斥解锁...
-    pthread_mutex_unlock(&m_mutex);
-  }
-}
-
-bool CApp::doProcSocket(char * lpBuffer, int inBufSize, sockaddr_in & inAddr)
-{
-  // 通过第一个字节的低2位，判断终端类型...
-  uint8_t tmTag = lpBuffer[0] & 0x03;
-  // 获取第一个字节的中2位，得到终端身份...
-  uint8_t idTag = (lpBuffer[0] >> 2) & 0x03;
-  // 获取第一个字节的高4位，得到数据包类型...
-  uint8_t ptTag = (lpBuffer[0] >> 4) & 0x0F;
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // 打印调试信息 => 打印所有接收到的数据包内容格式信息...
-  //log_debug("recvfrom, size: %u, tmTag: %d, idTag: %d, ptTag: %d", inBufSize, tmTag, idTag, ptTag);
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-  // 如果终端既不是Student也不是Teacher或Server，错误终端，直接扔掉数据...
-  if( tmTag != TM_TAG_STUDENT && tmTag != TM_TAG_TEACHER && tmTag != TM_TAG_SERVER ) {
-    log_debug("Error Terminate Type: %d", tmTag);
-    return false;
-  }
-  // 如果终端身份既不是Pusher也不是Looker或Server，错误身份，直接扔掉数据...
-  if( idTag != ID_TAG_PUSHER && idTag != ID_TAG_LOOKER && idTag != ID_TAG_SERVER ) {
-    log_debug("Error Identify Type: %d", idTag);
-    return false;
-  }
-  // 获取发送者映射的地址和端口号 => 后期需要注意端口号变化的问题...
-  uint32_t nHostSinAddr = ntohl(inAddr.sin_addr.s_addr);
-  uint16_t nHostSinPort = ntohs(inAddr.sin_port);
-  // 如果是删除指令，需要做特殊处理...
-  if( ptTag == PT_TAG_DELETE ) {
-    this->doTagDelete(nHostSinPort);
-    return false;
-  }
-  // 通过获得的端口，查找CNetwork对象...
-  CNetwork * lpNetwork = NULL;
-  GM_MapNetwork::iterator itorItem;
-  itorItem = m_MapNetwork.find(nHostSinPort);
-  // 如果没有找到创建一个新的对象...
-  if( itorItem == m_MapNetwork.end() ) {
-    // 如果不是创建命令 => 打印错误信息...
-    if( ptTag != PT_TAG_CREATE ) {
-      log_debug("Server Reject for tmTag: %s, idTag: %s, ptTag: %d", get_tm_tag(tmTag), get_id_tag(idTag), ptTag);
-      return false;
-    }
-    assert( ptTag == PT_TAG_CREATE );
-    // 只有创建命令可以被用来创建新对象...
-    switch( tmTag ) {
-      case TM_TAG_STUDENT: lpNetwork = new CStudent(tmTag, idTag, nHostSinAddr, nHostSinPort); break;
-      case TM_TAG_TEACHER: lpNetwork = new CTeacher(tmTag, idTag, nHostSinAddr, nHostSinPort); break;
-    }
-  } else {
-    // 注意：这里可能会连续收到 PT_TAG_CREATE 命令，不影响...
-    lpNetwork = itorItem->second;
-    assert( lpNetwork->GetHostAddr() == nHostSinAddr );
-    assert( lpNetwork->GetHostPort() == nHostSinPort );
-    // 注意：探测包的tmTag和idTag，可能与对象的tmTag和idTag不一致 => 探测包可能是转发的，身份是相反的...
-  }
-  // 如果网络层对象为空，打印错误...
-  if( lpNetwork == NULL ) {
-    log_trace("Error CNetwork is NULL");
-    return false;
-  }
-  // 将网络对象更新到对象集合当中...
-  m_MapNetwork[nHostSinPort] = lpNetwork;
-  // 将获取的数据包投递到网络对象当中...
-  return lpNetwork->doProcess(ptTag, lpBuffer, inBufSize);
-}
-
-void CApp::doTagDelete(int nHostPort)
-{
-  // 通过获得的端口，查找CNetwork对象...
-  CNetwork * lpNetwork = NULL;
-  GM_MapNetwork::iterator itorItem;
-  itorItem = m_MapNetwork.find(nHostPort);
-  if( itorItem == m_MapNetwork.end() ) {
-    log_debug("Delete can't find CNetwork by host port(%d)", nHostPort);
-    return;
-  }
-  // 将找到的CNetwork对象删除之...
-  lpNetwork = itorItem->second;
-  delete lpNetwork; lpNetwork = NULL;
-  m_MapNetwork.erase(itorItem++);  
-}
-
-// 处理由kCmd_Camera_LiveStop触发的删除事件...
-void CApp::doDeleteForCameraLiveStop(int inRoomID)
-{
-  // 首先进行线程互斥...
-  pthread_mutex_lock(&m_mutex);
-  CRoom * lpUdpRoom = NULL;
-  CStudent * lpStudentPusher = NULL;
-  CTeacher * lpTeacherLooker = NULL;
-  do {
-    // 通过指定的房间编号查找UDP房间对象...
-    GM_MapRoom::iterator itorRoom = m_MapRoom.find(inRoomID);
-    if( itorRoom == m_MapRoom.end() )
-      break;
-    // 获取UDP房间里的唯一老师观看者对象和唯一学生推流者对象...
-    lpUdpRoom = itorRoom->second; assert(lpUdpRoom != NULL);
-    lpTeacherLooker = lpUdpRoom->GetTeacherLooker();
-    lpStudentPusher = lpUdpRoom->GetStudentPusher();
-    // 房间里的老师观看者对象有效，并且UDP删除命令还没有到达，删除之...
-    if( lpTeacherLooker != NULL && !lpTeacherLooker->GetDeleteByUDP() ) {
-      // 设置删除标志，不要通知老师端，避免死锁...
-      lpTeacherLooker->SetDeleteByTCP();
-      // 通过关联端口号，删除老师观看者对象...
-      this->doTagDelete(lpTeacherLooker->GetHostPort());
-    }
-    // 房间里的学生推流者对象有效，并且UDP删除命令还没有到达，删除之...
-    if( lpStudentPusher != NULL && !lpStudentPusher->GetDeleteByUDP() ) {
-      // 设置删除标志，不要通知学生端，避免死锁...
-      lpStudentPusher->SetDeleteByTCP();
-      // 通过关联端口号，删除学生推流者对象...
-      this->doTagDelete(lpStudentPusher->GetHostPort());
-    }
-  } while( false );  
-  // 最后退出线程互斥...
-  pthread_mutex_unlock(&m_mutex);    
-}
+}*/

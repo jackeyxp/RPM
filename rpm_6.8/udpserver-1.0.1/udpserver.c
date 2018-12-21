@@ -2,12 +2,12 @@
 #include "app.h"
 #include "bmem.h"
 #include "getopt.h"
-
+#include <signal.h>
 #include <sys/stat.h>
 
 // STL must use g++...
-// g++ -g udpserver.c bmem.c thread.cpp app.cpp tcpcamera.cpp tcproom.cpp tcpcenter.cpp tcpclient.cpp tcpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
-// valgrind --tool=memcheck --leak-check=full --show-reachable=yes ./udpserver
+// g++ -g udpserver.c bmem.c thread.cpp app.cpp tcpcamera.cpp tcproom.cpp tcpcenter.cpp tcpclient.cpp tcpthread.cpp udpthread.cpp room.cpp network.cpp student.cpp teacher.cpp -o udpserver -lrt -lpthread -ljson
+// valgrind --tool=helgrind --tool=memcheck --leak-check=full --show-reachable=yes ./udpserver
 
 CApp theApp;
 
@@ -16,8 +16,11 @@ CApp theApp;
 
 char g_absolute_path[256] = {0};
 char g_log_file_path[256] = {0};
-void doSliceLogFile(struct tm * lpCurTm);
+
 bool doGetCurFullPath(char * lpOutPath, int inSize);
+void doSliceLogFile(struct tm * lpCurTm);
+void do_sig_catcher(int signo);
+bool doRegisterSignal();
 
 int main(int argc, char **argv)
 {
@@ -25,13 +28,23 @@ int main(int argc, char **argv)
   if( !doGetCurFullPath(g_absolute_path, 256) )
     return -1;
   // 构造日志文件完整路径...
-  sprintf(g_log_file_path, "%s%s", g_absolute_path, "udpserver.log");
-  // 读取命令行各字段内容信息...
-  theApp.doProcessCmdLine(argc, argv);
+  sprintf(g_log_file_path, "%s%s", g_absolute_path, DEFAULT_LOG_FILE);
+  // 读取命令行各字段内容信息并执行...
+  if( theApp.doProcessCmdLine(argc, argv) )
+    return -1;
+  // 只允许一个进程运行，多个进程会造成混乱...
+  if( !theApp.check_pid_file() )
+    return -1;
+  // 注册信号操作函数...
+  if( !doRegisterSignal() )
+    return -1;
   // 增大文件打开数量...
   if( !theApp.doInitRLimit() )
     return -1;
-  
+  // 创建进程的pid文件...
+  if( !theApp.acquire_pid_file() )
+    return -1;
+
   // 注意：阿里云专有网络无法获取外网地址，中心服务器可以同链接获取外网地址...
   // 因此，这个接口作废了，不会被调用，而是让中心服务器通过链接地址自动获取...
   //if( !theApp.doInitWanAddr() )
@@ -43,14 +56,42 @@ int main(int argc, char **argv)
   // 启动超时检测线程对象...
   if( !theApp.doStartThread() )
     return -1;
-  // 阻塞循环等待网络数据到达...
-  theApp.doWaitSocket();
+  // 注意：主线程退出时会删除pid文件...
+  // 阻塞循环等待UDP网络数据到达...
+  theApp.doWaitUdpSocket();
   // 阻塞终止，退出进程...
   return 0;
 }
 
 // 返回全局的App对象...
 CApp * GetApp() { return &theApp; }
+
+// 注册全局的信号处理函数...
+bool doRegisterSignal()
+{
+  struct sigaction sa = {0};
+  
+  /* Install do_sig_catcher() as a signal handler */
+  sa.sa_handler = do_sig_catcher;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGTERM, &sa, NULL);
+ 
+  sa.sa_handler = do_sig_catcher;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGINT, &sa, NULL);
+  
+  return true;
+}
+
+void do_sig_catcher(int signo)
+{
+  log_trace("udpserver catch signal=%d", signo);
+  if( signo == SIGTERM || signo == SIGINT ) {
+    theApp.onSignalQuit();
+  }
+}
 
 // 获取当前进程全路径...
 bool doGetCurFullPath(char * lpOutPath, int inSize)
@@ -304,4 +345,9 @@ const char * get_command_name(int inCmd)
     case kCmd_PHP_GetPlayerList:    return "PHP_GetPlayerList";
   }
   return "unknown";
+}
+
+const char * get_abs_path()
+{
+  return g_absolute_path;
 }

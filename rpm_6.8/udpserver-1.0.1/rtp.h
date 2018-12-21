@@ -1,6 +1,8 @@
 
 #pragma once
 
+#define DEFAULT_PID_FILE   "udpserver.pid"
+#define DEFAULT_LOG_FILE   "udpserver.log"
 #define DEF_CENTER_ADDR    "edu.ihaoyi.cn"         // 默认UDP中心服务器域名...
 #define DEF_CENTER_PORT             26026          // 默认UDP中心服务器端口...
 #define DEF_TCP_PORT                21002          // 默认TCP服务器端口

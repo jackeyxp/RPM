@@ -4,10 +4,11 @@
 #include "network.h"
 #include "circlebuf.h"
 
+class CUDPThread;
 class CTeacher : public CNetwork
 {
 public:
-  CTeacher(uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t inHostPort);
+  CTeacher(CUDPThread * lpUDPThread, uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t inHostPort);
   virtual ~CTeacher();
 public:
   int           doServerSendSupply();
@@ -49,4 +50,5 @@ private:
   circlebuf     m_video_circle;       // 推流端视频环形队列...
   GM_MapLose    m_AudioMapLose;			  // 推流端音频检测到的丢包集合队列...
   GM_MapLose    m_VideoMapLose;			  // 推流端视频检测到的丢包集合队列...
+  CUDPThread  * m_lpUDPThread; 
 };
