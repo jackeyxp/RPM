@@ -12,7 +12,7 @@ enum {
 // define command id...
 enum {
   kCmd_Student_Login        = 1,
-  kCmd_Student_OnLine	    = 2,
+  kCmd_Student_OnLine	      = 2,
   kCmd_Teacher_Login        = 3,
   kCmd_Teacher_OnLine       = 4,
   kCmd_UDP_Logout           = 5,
