@@ -312,6 +312,21 @@ void CTCPClient::doUDPLogoutToTCP(int nDBCameraID, uint8_t tmTag, uint8_t idTag)
   json_object_put(new_obj);
 }
 
+// 注意：这是第二种方案 => 直接发送停止推流 => 通道切换时会造成重复停止...
+// 老师观看者被删除，通知摄像头对应的学生推流者停止推流...
+void CTCPClient::doCameraLiveStopByTeacherLookerDelete(int nDBCameraID)
+{
+  // 构造转发JSON数据块 => 摄像头编号 => camera_id
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "camera_id", json_object_new_int(nDBCameraID));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendCommonCmd(kCmd_Camera_LiveStop, lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);  
+}
+
 int CTCPClient::doCmdStudentOnLine()
 {
   return 0;

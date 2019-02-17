@@ -208,51 +208,58 @@ bool CApp::acquire_pid_file()
 
 bool CApp::IsUDPTeacherPusherOnLine(int inRoomID)
 {
-  if( m_lpUDPThread == NULL && this->IsSignalQuit() )
+  if( m_lpUDPThread == NULL || this->IsSignalQuit() )
     return false;
   return m_lpUDPThread->IsUDPTeacherPusherOnLine(inRoomID);
 }
 
 bool CApp::IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID)
 {
-  if( m_lpUDPThread == NULL && this->IsSignalQuit() )
+  if( m_lpUDPThread == NULL || this->IsSignalQuit() )
     return false;
   return m_lpUDPThread->IsUDPStudentPusherOnLine(inRoomID, inDBCameraID);
 }
 
 void CApp::doDeleteForCameraLiveStop(int inRoomID)
 {
-  if( m_lpUDPThread == NULL && this->IsSignalQuit() )
+  if( m_lpUDPThread == NULL || this->IsSignalQuit() )
     return;
   return m_lpUDPThread->doDeleteForCameraLiveStop(inRoomID);
 }
 
 int CApp::doTCPRoomCommand(int nCmdID, int nRoomID)
 {
-  if( m_lpTCPThread == NULL && this->IsSignalQuit() )
+  if( m_lpTCPThread == NULL || this->IsSignalQuit() )
     return -1;
   return m_lpTCPThread->doRoomCommand(nCmdID, nRoomID);
 }
 
 void CApp::doUDPLogoutToTCP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag)
 {
-  if( m_lpTCPThread == NULL && this->IsSignalQuit() )
+  if( m_lpTCPThread == NULL || this->IsSignalQuit() )
     return;
   m_lpTCPThread->doUDPLogoutToTCP(nTCPSockFD, nDBCameraID, tmTag, idTag);
 }
 
 void CApp::doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag)
 {
-  if( m_lpTCPThread == NULL && this->IsSignalQuit() )
+  if( m_lpTCPThread == NULL || this->IsSignalQuit() )
     return;
   m_lpTCPThread->doUDPStudentPusherOnLine(inRoomID, inDBCameraID, bIsOnLineFlag);
 }
 
 void CApp::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
 {
-  if( m_lpTCPThread == NULL && this->IsSignalQuit() )
+  if( m_lpTCPThread == NULL || this->IsSignalQuit() )
     return;
   m_lpTCPThread->doUDPTeacherPusherOnLine(inRoomID, bIsOnLineFlag);
+}
+
+void CApp::doUDPTeacherLookerDelete(int inRoomID, int inDBCameraID)
+{
+  if( m_lpTCPThread == NULL || this->IsSignalQuit() )
+    return;
+  m_lpTCPThread->doUDPTeacherLookerDelete(inRoomID, inDBCameraID);
 }
 
 void CApp::doWaitUdpSocket()

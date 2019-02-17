@@ -97,7 +97,12 @@ void CRoom::doCreateTeacher(CTeacher * lpTeacher)
     // 将新的讲师推流对象保存起来...
     m_lpTeacherPusher = lpTeacher;
   } else if( idTag == ID_TAG_LOOKER ) {
+    // 先将新的老师观看者对象保存起来...
     m_lpTeacherLooker = lpTeacher;
+    // 如果学生推流者不为空，需要开启探测...
+    if( m_lpStudentPusher != NULL ) {
+      m_lpStudentPusher->SetCanDetect(true);
+    }
   }
 }
 //
@@ -110,13 +115,21 @@ void CRoom::doDeleteTeacher(CTeacher * lpTeacher)
     m_lpTeacherPusher = NULL;
     return;
   }
-  // 如果是老师观看端，置空，返回...
+  // 如果是老师观看端，通知学生推流端停止推流，置空，返回...
   if( m_lpTeacherLooker == lpTeacher ) {
+    // 先将老师观看者对象置空...
     m_lpTeacherLooker = NULL;
+    // 如果学生推流者不为空，需要关闭探测...
+    if( m_lpStudentPusher != NULL ) {
+      m_lpStudentPusher->SetCanDetect(false);
+    }
+    // 注意：这是第二种方案 => 直接发送停止推流 => 通道切换时会造成重复停止...
+    //GetApp()->doUDPTeacherLookerDelete(m_nRoomID, lpTeacher->GetDBCameraID());
     return;
   }
 }
 
+// 转发数据包给房间里所有的学生观看者对象...
 bool CRoom::doTransferToStudentLooker(char * lpBuffer, int inBufSize)
 {
   if( lpBuffer == NULL || inBufSize <= 0 )
@@ -127,7 +140,7 @@ bool CRoom::doTransferToStudentLooker(char * lpBuffer, int inBufSize)
   for(itorItem = m_MapStudentLooker.begin(); itorItem != m_MapStudentLooker.end(); ++itorItem) {
     CStudent * lpStudent = itorItem->second;
     if( lpStudent == NULL ) continue;
-    lpStudent->doTransferToStudentLooker(lpBuffer, inBufSize);
+    lpStudent->doTransferToFrom(lpBuffer, inBufSize);
   }
   return true;
 }

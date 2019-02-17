@@ -95,9 +95,9 @@ void CUDPThread::Entry()
     this->doCheckTimeout();
     // 处理一个到达的UDP数据包...
     this->doRecvPacket();
-    // 先发送针对讲师的补包命令...
+    // 先发送针对推流者的补包命令...
     this->doSendSupplyCmd();
-    // 再发送针对学生的丢包命令...
+    // 再发送针对观看者的丢包命令...
     this->doSendLoseCmd();
   }
   // 打印UDP线程退出信息...
@@ -204,21 +204,22 @@ void CUDPThread::doRecvPacket()
   bCanSemPost ? os_sem_post(m_sem_t) : NULL;
 }
 
+// 推流者才会有补包命令...
 void CUDPThread::doSendSupplyCmd()
 {
   // 线程互斥锁定...
   pthread_mutex_lock(&m_room_mutex);
   // 补包发送结果 => -1(删除)0(没发)1(已发)...
-  GM_ListTeacher::iterator itorItem = m_ListTeacher.begin();
-  while( itorItem != m_ListTeacher.end() ) {
+  GM_ListPusher::iterator itorItem = m_ListPusher.begin();
+  while( itorItem != m_ListPusher.end() ) {
     // 执行补包命令，返回执行结果...
     int nSendResult = (*itorItem)->doServerSendSupply();
     // -1 => 没有补包了，从列表中删除...
     if( nSendResult < 0 ) {
-      m_ListTeacher.erase(itorItem++);
+      m_ListPusher.erase(itorItem++);
       continue;
     }
-    // 继续检测下一个有补包的老师推流端...
+    // 继续检测下一个有补包的推流者...
     ++itorItem;
     // 0 => 有补包，但是不到补包时间 => 休息15毫秒...
     if( nSendResult == 0 )
@@ -230,18 +231,19 @@ void CUDPThread::doSendSupplyCmd()
   pthread_mutex_unlock(&m_room_mutex);
 }
 
+// 观看者才会有丢包命令...
 void CUDPThread::doSendLoseCmd()
 {
   // 线程互斥锁定...
   pthread_mutex_lock(&m_room_mutex);
-  // 遍历包含丢包数据学生队列对象...
-  GM_ListStudent::iterator itorItem = m_ListStudent.begin();
-  while( itorItem != m_ListStudent.end() ) {
+  // 遍历包含丢包数据观看者队列对象...
+  GM_ListLooker::iterator itorItem = m_ListLooker.begin();
+  while( itorItem != m_ListLooker.end() ) {
     // 执行发送丢包数据内容，返回是否还要执行丢包...
     bool bSendResult = (*itorItem)->doServerSendLose();
     // false => 没有丢包要发了，从队列当中删除...
     if( !bSendResult ) {
-      m_ListStudent.erase(itorItem++);
+      m_ListLooker.erase(itorItem++);
       continue;
     }
     assert( bSendResult );
@@ -316,40 +318,40 @@ bool CUDPThread::doProcSocket(uint32_t nHostSinAddr, uint16_t nHostSinPort, char
   return lpNetwork->doProcess(ptTag, lpBuffer, inBufSize);
 }
 
-void CUDPThread::doAddSupplyForTeacher(CTeacher * lpTeacher)
+void CUDPThread::doAddSupplyForPusher(CNetwork * lpPusher)
 {
   // 注意：是从doProcSocket()过来的，已经做了互斥处理...
-  GM_ListTeacher::iterator itorItem;
-  itorItem = std::find(m_ListTeacher.begin(), m_ListTeacher.end(), lpTeacher);
+  GM_ListPusher::iterator itorItem;
+  itorItem = std::find(m_ListPusher.begin(), m_ListPusher.end(), lpPusher);
   // 如果对象已经存在列表当中，直接返回...
-  if( itorItem != m_ListTeacher.end() )
+  if( itorItem != m_ListPusher.end() )
     return;
   // 对象没有在列表当中，放到列表尾部...
-  m_ListTeacher.push_back(lpTeacher);
+  m_ListPusher.push_back(lpPusher);
 }
 
-void CUDPThread::doDelSupplyForTeacher(CTeacher * lpTeacher)
+void CUDPThread::doDelSupplyForPusher(CNetwork * lpPusher)
 {
   // 注意：是从doProcSocket()过来的，已经做了互斥处理...
-  m_ListTeacher.remove(lpTeacher);
+  m_ListPusher.remove(lpPusher);
 }
 
-void CUDPThread::doAddLoseForStudent(CStudent * lpStudent)
+void CUDPThread::doAddLoseForLooker(CNetwork * lpLooker)
 {
   // 注意：是从doProcSocket()过来的，已经做了互斥处理...
-  GM_ListStudent::iterator itorItem;
-  itorItem = std::find(m_ListStudent.begin(), m_ListStudent.end(), lpStudent);
+  GM_ListLooker::iterator itorItem;
+  itorItem = std::find(m_ListLooker.begin(), m_ListLooker.end(), lpLooker);
   // 如果对象已经存在列表当中，直接返回...
-  if( itorItem != m_ListStudent.end() )
+  if( itorItem != m_ListLooker.end() )
     return;
   // 对象没有在列表当中，放到列表尾部...
-  m_ListStudent.push_back(lpStudent);
+  m_ListLooker.push_back(lpLooker);
 }
 
-void CUDPThread::doDelLoseForStudent(CStudent * lpStudent)
+void CUDPThread::doDelLoseForLooker(CNetwork * lpLooker)
 {
   // 注意：是从doProcSocket()过来的，已经做了互斥处理...
-  m_ListStudent.remove(lpStudent);
+  m_ListLooker.remove(lpLooker);
 }
 
 // 创建房间 => 通过房间号进行创建...

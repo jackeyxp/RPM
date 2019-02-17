@@ -21,6 +21,7 @@ public:
   int         doRoomCommand(int nCmdID, int nRoomID);
   void        doIncreaseClient(int inSinPort, string & strSinAddr);
   void        doDecreaseClient(int inSinPort, string & strSinAddr);
+  void        doUDPTeacherLookerDelete(int inRoomID, int inDBCameraID);
   void        doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag);
   void        doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag);
   void        doUDPLogoutToTCP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag);

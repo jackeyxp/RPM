@@ -4,6 +4,7 @@
 #include "tcpclient.h"
 #include "tcpthread.h"
 #include "tcpcenter.h"
+#include "tcpcamera.h"
 
 #define WAIT_TIME_OUT     10 * 1000   // 全局超时检测10秒...
 
@@ -101,6 +102,38 @@ void CTCPThread::doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag)
   } while( false );
   // 退出线程互斥保护...
   //pthread_mutex_unlock(&m_mutex);  
+}
+
+// 注意：这是第二种方案 => 直接发送停止推流 => 通道切换时会造成重复停止...
+// 老师观看者被删除，通知摄像头对应的学生推流者停止推流...
+void CTCPThread::doUDPTeacherLookerDelete(int inRoomID, int inDBCameraID)
+{
+  CTCPRoom * lpTCPRoom = NULL;
+  GM_MapTCPRoom::iterator itorRoom;
+  do {
+    // 通过房间编号，找到房间对象...
+    itorRoom = m_MapTCPRoom.find(inRoomID);
+    if( itorRoom == m_MapTCPRoom.end() )
+      break;
+    // 在房间对象中，通过通道编号，找到通道对象...
+    lpTCPRoom = itorRoom->second; assert(lpTCPRoom != NULL);
+    GM_MapTCPCamera & theMapCamera = lpTCPRoom->GetMapCamera();
+    GM_MapTCPCamera::iterator itorItem = theMapCamera.find(inDBCameraID);
+    if( itorItem == theMapCamera.end() )
+      break;
+    // 在通道对象中，找到套接字对应的学生端对象...
+    CTCPCamera * lpTCPCamera = itorItem->second;
+    int nTCPSockFD = lpTCPCamera->GetTCPSockFD();
+    GM_MapTCPConn::iterator itorConn = m_MapConnect.find(nTCPSockFD);
+    if( itorConn == m_MapConnect.end() )
+      break;
+    // 判断学生端对象的类型有效性...
+    CTCPClient * lpStudent = itorConn->second;
+    if( lpStudent->GetClientType() != kClientStudent )
+      break;
+    // 向学生端推流对象发送停止推流的命令通知...
+    lpStudent->doCameraLiveStopByTeacherLookerDelete(inDBCameraID);
+  } while( false );
 }
 
 // 创建房间 => 通过房间号进行创建...
