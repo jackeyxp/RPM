@@ -8,6 +8,7 @@ CRoom::CRoom(int inRoomID)
   : m_lpStudentPusher(NULL)
   , m_lpTeacherPusher(NULL)
   , m_lpTeacherLooker(NULL)
+  , m_wExAudioChangeNum(65530)
   , m_nRoomID(inRoomID)
 {
   
@@ -37,6 +38,8 @@ void CRoom::doCreateStudent(CStudent * lpStudent)
     }
     // 将新的学生推流对象保存起来...
     m_lpStudentPusher = lpStudent;
+    // 累加扩展音频变化次数(自动溢出回还)...
+    this->AddExAudioChangeNum();
   } else if( idTag == ID_TAG_LOOKER ) {
     m_MapStudentLooker[nHostPort] = lpStudent;
   }
@@ -129,8 +132,8 @@ void CRoom::doDeleteTeacher(CTeacher * lpTeacher)
   }
 }
 
-// 转发数据包给房间里所有的学生观看者对象...
-bool CRoom::doTransferToStudentLooker(char * lpBuffer, int inBufSize)
+// 处理老师推流者转发给学生观看者的数据包 => 转发给房间里所有学生观看者...
+bool CRoom::doTeacherPusherToStudentLooker(char * lpBuffer, int inBufSize)
 {
   if( lpBuffer == NULL || inBufSize <= 0 )
     return false;
@@ -141,6 +144,51 @@ bool CRoom::doTransferToStudentLooker(char * lpBuffer, int inBufSize)
     CStudent * lpStudent = itorItem->second;
     if( lpStudent == NULL ) continue;
     lpStudent->doTransferToFrom(lpBuffer, inBufSize);
+  }
+  return true;
+}
+
+// 处理学生推流者转发给学生观看者的数据包 => 目前只转发音频数据包...
+// 注意：必须老师推流者和学生推流者同时有效时，才能进行这个特殊转发...
+bool CRoom::doStudentPusherToStudentLooker(char * lpBuffer, int inBufSize)
+{
+  if( lpBuffer == NULL || inBufSize <= 0 )
+    return false;
+  // 将音频序列头信息追加到转发数据包头的保留字段当中...
+  rtp_hdr_t * lpHdrHeader = (rtp_hdr_t*)lpBuffer;
+  // 如果不是音频数据包，直接返回...
+  if( lpHdrHeader->pt != PT_TAG_AUDIO )
+    return false;
+  // 如果没有在线的观看学生端，直接返回...
+  if( m_MapStudentLooker.size() <= 0 )
+    return false;
+  // 如果学生推流者无效，直接返回...
+  if( m_lpStudentPusher == NULL )
+    return false;
+  // 如果老师推流者无效，直接返回...
+  if( m_lpTeacherPusher == NULL )
+    return false;
+  // 获取学生推流者的序列头信息 => 序列头为空，直接返回...
+  string & strSeqHeader = m_lpStudentPusher->GetSeqHeader();
+  if( strSeqHeader.size() <= 0 )
+    return false;
+  // 获取学生推流者自身的tcpSock标识符号...
+  int nPushSockID = m_lpStudentPusher->GetTCPSockID();
+  // 获取扩展音频变化次数(自动溢出回还)，保存到高两字节...
+  lpHdrHeader->noset = ((uint32_t)(this->GetExAudioChangeNum()) << 16);
+  // 获取序列头里面音频标识信息内容 => 获取第三个字节，填充到最低字节位...
+  lpHdrHeader->noset |= (uint8_t)strSeqHeader.at(2);
+  // 开始遍历学生观看者对象列表，转发学生推流者数据包...
+  GM_MapStudent::iterator itorItem;
+  for(itorItem = m_MapStudentLooker.begin(); itorItem != m_MapStudentLooker.end(); ++itorItem) {
+    CStudent * lpStudent = itorItem->second;
+    if (lpStudent == NULL) continue;
+    // 如果推流者tcpSock与观看者tcpSock一致，不能转发给这个观看者...
+    if (lpStudent->GetTCPSockID() == nPushSockID) continue;
+    // 将学生推流者数据包转发给tcpSock不一致的学生观看者对象...
+    lpStudent->doTransferToFrom(lpBuffer, inBufSize);
+    // 打印扩展音频转发详细信息 => 只是为了调试使用...
+    //log_debug("HostAddr: %u, HostPort: %d, ExAudio: %d", lpStudent->GetHostAddr(), lpStudent->GetHostPort(), lpHdrHeader->seq);
   }
   return true;
 }

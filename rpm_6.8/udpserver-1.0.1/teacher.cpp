@@ -197,22 +197,22 @@ bool CTeacher::doTagDetect(char * lpBuffer, int inBufSize)
   // 只有老师推流者，服务器才会发送主动探测包...
   // 如果是 服务器 发出的探测包，计算网络延时...
   if( tmTag == TM_TAG_SERVER && idTag == ID_TAG_SERVER ) {
-		// 获取收到的探测数据包...
-		rtp_detect_t rtpDetect = { 0 };
-		memcpy(&rtpDetect, lpBuffer, sizeof(rtpDetect));
-		// 当前时间转换成毫秒，计算网络延时 => 当前时间 - 探测时间...
-		uint32_t cur_time_ms = (uint32_t)(os_gettime_ns() / 1000000);
-		int keep_rtt = cur_time_ms - rtpDetect.tsSrc;
-		// 防止网络突发延迟增大, 借鉴 TCP 的 RTT 遗忘衰减的算法...
-		if (m_server_rtt_ms < 0) { m_server_rtt_ms = keep_rtt; }
-		else { m_server_rtt_ms = (7 * m_server_rtt_ms + keep_rtt) / 8; }
-		// 计算网络抖动的时间差值 => RTT的修正值...
-		if (m_server_rtt_var_ms < 0) { m_server_rtt_var_ms = abs(m_server_rtt_ms - keep_rtt); }
-		else { m_server_rtt_var_ms = (m_server_rtt_var_ms * 3 + abs(m_server_rtt_ms - keep_rtt)) / 4; }
-		// 打印探测结果 => 探测序号 | 网络延时(毫秒)...
-		log_debug("[%s-%s] Recv Detect => dtNum: %d, rtt: %d ms, rtt_var: %d ms",
-              get_tm_tag(this->GetTmTag()), get_id_tag(this->GetIdTag()),
-              rtpDetect.dtNum, m_server_rtt_ms, m_server_rtt_var_ms);    
+    // 获取收到的探测数据包...
+    rtp_detect_t rtpDetect = { 0 };
+    memcpy(&rtpDetect, lpBuffer, sizeof(rtpDetect));
+    // 当前时间转换成毫秒，计算网络延时 => 当前时间 - 探测时间...
+    uint32_t cur_time_ms = (uint32_t)(os_gettime_ns() / 1000000);
+    int keep_rtt = cur_time_ms - rtpDetect.tsSrc;
+    // 防止网络突发延迟增大, 借鉴 TCP 的 RTT 遗忘衰减的算法...
+    if (m_server_rtt_ms < 0) { m_server_rtt_ms = keep_rtt; }
+    else { m_server_rtt_ms = (7 * m_server_rtt_ms + keep_rtt) / 8; }
+    // 计算网络抖动的时间差值 => RTT的修正值...
+    if (m_server_rtt_var_ms < 0) { m_server_rtt_var_ms = abs(m_server_rtt_ms - keep_rtt); }
+    else { m_server_rtt_var_ms = (m_server_rtt_var_ms * 3 + abs(m_server_rtt_ms - keep_rtt)) / 4; }
+    // 打印探测结果 => 探测序号 | 网络延时(毫秒)...
+    //log_debug("[%s-%s] Recv Detect => dtNum: %d, rtt: %d ms, rtt_var: %d ms",
+    //          get_tm_tag(this->GetTmTag()), get_id_tag(this->GetIdTag()),
+    //          rtpDetect.dtNum, m_server_rtt_ms, m_server_rtt_var_ms);    
   }
   return true;
 }
@@ -819,13 +819,17 @@ void CTeacher::doSendLosePacket(bool bIsAudio)
   this->doTransferToFrom((char*)lpSendHeader, nSendSize);
 }
 
+// 将老师推流者数据包转发到所有房间里的学生观看者...
 bool CTeacher::doTransferToStudentLooker(char * lpBuffer, int inBufSize)
 {
+  // 如果不是老师推流者，直接返回...
+  if( this->GetIdTag() != ID_TAG_PUSHER )
+    return false;
   // 如果没有房间，直接返回...
   if( m_lpRoom == NULL )
     return false;
   // 转发命令数据包到所有房间里的学生在线观看者...
-  return m_lpRoom->doTransferToStudentLooker(lpBuffer, inBufSize);
+  return m_lpRoom->doTeacherPusherToStudentLooker(lpBuffer, inBufSize);
 }
 
 // 原路返回的转发接口 => 观看者|推流者都可以原路返回...

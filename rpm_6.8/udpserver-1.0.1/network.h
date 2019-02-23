@@ -17,6 +17,7 @@ public:
   uint16_t      GetHostPort() { return m_nHostPort; }
   string    &   GetSeqHeader() { return m_strSeqHeader; }
   int           GetDBCameraID() { return m_rtp_create.liveID; }
+  int           GetTCPSockID() { return m_rtp_create.tcpSock; }
   void          SetDeleteByTCP() { m_bIsDeleteByTCP = true; }
   bool          GetDeleteByTCP() { return m_bIsDeleteByTCP; }
   bool          GetDeleteByUDP() { return m_bIsDeleteByUDP; }

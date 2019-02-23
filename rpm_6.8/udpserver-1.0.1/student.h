@@ -32,10 +32,10 @@ protected:
   virtual bool  doServerSendLose();
 private:
   int           doSendSupplyCmd(bool bIsAudio);
-  void          doSendLosePacket(bool bIsAudio);
+  void          doSendLosePacket(uint8_t inPType);
   uint32_t      doCalcMaxConSeq(bool bIsAudio);
 
-  bool          doIsTeacherPusherLose(bool bIsAudio, uint32_t inLoseSeq);
+  bool          doIsPusherLose(uint8_t inPType, uint32_t inLoseSeq);
   bool          doCreateForPusher(char * lpBuffer, int inBufSize);
   bool          doCreateForLooker(char * lpBuffer, int inBufSize);
   bool          doHeaderForPusher(char * lpBuffer, int inBufSize);
@@ -58,5 +58,6 @@ private:
   circlebuf     m_video_circle;       // 推流端视频环形队列...
   GM_MapLose    m_AudioMapLose;			  // 推流端检测|观看端上报的音频丢包集合队列...
   GM_MapLose    m_VideoMapLose;			  // 推流端检测|观看端上报的视频丢包集合队列...
+  GM_MapLose    m_Ex_AudioMapLose;		// 推流端无效|观看端上报的扩展音频丢包集合队列...
   CUDPThread  * m_lpUDPThread; 
 };
