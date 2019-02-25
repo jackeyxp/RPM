@@ -13,6 +13,7 @@ public:
 public:
   circlebuf  &  GetAudioCircle() { return m_audio_circle; }
   circlebuf  &  GetVideoCircle() { return m_video_circle; }
+  ROLE_TYPE     GetTCPRoleType() { return m_nTCPRoleType; }
   void          SetCanDetect(bool bFlag) { m_bIsCanDetect = bFlag; }
 public:
   uint32_t      doCalcMinSeq(bool bIsAudio);
@@ -50,6 +51,7 @@ private:
   void          doEraseLoseSeq(uint8_t inPType, uint32_t inSeqID);
   void          doFillLosePack(uint8_t inPType, uint32_t nStartLoseID, uint32_t nEndLoseID);
 private:
+  ROLE_TYPE     m_nTCPRoleType;       // TCP连接终端的角色类型...
   bool          m_bIsCanDetect;       // 服务器能否向推流端发送探测数据包标志...
   int           m_server_rtt_ms;      // Server => 网络往返延迟值 => 毫秒 => 推流时服务器探测延时
   int           m_server_rtt_var_ms;  // Server => 网络抖动时间差 => 毫秒 => 推流时服务器探测延时

@@ -3,6 +3,7 @@
 #include "getopt.h"
 #include "tcpthread.h"
 #include "udpthread.h"
+#include "tcpclient.h"
 #include <ifaddrs.h>
 #include <netdb.h>
 #include <signal.h>
@@ -260,6 +261,18 @@ void CApp::doUDPTeacherLookerDelete(int inRoomID, int inDBCameraID)
   if( m_lpTCPThread == NULL || this->IsSignalQuit() )
     return;
   m_lpTCPThread->doUDPTeacherLookerDelete(inRoomID, inDBCameraID);
+}
+
+ROLE_TYPE CApp::GetTCPRoleType(int inTCPSockID)
+{
+  if( m_lpTCPThread == NULL || this->IsSignalQuit() )
+    return kRoleWanRecv;
+  GM_MapTCPConn & theMapConn = m_lpTCPThread->GetMapConnect();
+  GM_MapTCPConn::iterator itorConn = theMapConn.find(inTCPSockID);
+  if( itorConn == theMapConn.end() )
+    return kRoleWanRecv;
+  CTCPClient * lpStudent = itorConn->second;
+  return lpStudent->GetRoleType();
 }
 
 void CApp::doWaitUdpSocket()

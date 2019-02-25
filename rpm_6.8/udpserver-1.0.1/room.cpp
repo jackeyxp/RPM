@@ -8,7 +8,7 @@ CRoom::CRoom(int inRoomID)
   : m_lpStudentPusher(NULL)
   , m_lpTeacherPusher(NULL)
   , m_lpTeacherLooker(NULL)
-  , m_wExAudioChangeNum(65530)
+  , m_wExAudioChangeNum(0)
   , m_nRoomID(inRoomID)
 {
   
@@ -183,8 +183,13 @@ bool CRoom::doStudentPusherToStudentLooker(char * lpBuffer, int inBufSize)
   for(itorItem = m_MapStudentLooker.begin(); itorItem != m_MapStudentLooker.end(); ++itorItem) {
     CStudent * lpStudent = itorItem->second;
     if (lpStudent == NULL) continue;
-    // 如果推流者tcpSock与观看者tcpSock一致，不能转发给这个观看者...
-    if (lpStudent->GetTCPSockID() == nPushSockID) continue;
+    // 获取学生观看者对应的tcp相关信息...
+    int nTCPSockID = lpStudent->GetTCPSockID();
+    ROLE_TYPE nRoleType = lpStudent->GetTCPRoleType();
+    // 如果推流者tcpSock与观看者tcpSock一致，并且不是组播发送者角色，不要转发给这个观看者...
+    if ((nTCPSockID == nPushSockID) && (nRoleType != kRoleMultiSend))
+      continue;
+    // 注意：终端是组播发送者，推流者和观看者tcpSock相同也要转发 => 为了保持组播数据一致...
     // 将学生推流者数据包转发给tcpSock不一致的学生观看者对象...
     lpStudent->doTransferToFrom(lpBuffer, inBufSize);
     // 打印扩展音频转发详细信息 => 只是为了调试使用...

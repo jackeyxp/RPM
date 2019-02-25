@@ -30,6 +30,7 @@ public:
   void        doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag);
   void        doUDPLogoutToTCP(int nTCPSockFD, int nDBCameraID, uint8_t tmTag, uint8_t idTag);
 public:
+  ROLE_TYPE   GetTCPRoleType(int inTCPSockID);
   int         GetListenFD() { return m_listen_fd; }
   int         GetCenterPort() { return DEF_CENTER_PORT; }
   const char* GetCenterAddr() { return DEF_CENTER_ADDR; }

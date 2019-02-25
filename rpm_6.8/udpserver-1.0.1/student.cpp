@@ -7,6 +7,7 @@
 
 CStudent::CStudent(CUDPThread * lpUDPThread, uint8_t tmTag, uint8_t idTag, uint32_t inHostAddr, uint16_t inHostPort)
   : CNetwork(tmTag, idTag, inHostAddr, inHostPort)
+  , m_nTCPRoleType(kRoleWanRecv)
   , m_lpUDPThread(lpUDPThread)
   , m_server_rtt_var_ms(-1)
   , m_server_rtt_ms(-1)
@@ -280,6 +281,7 @@ bool CStudent::doTagCreate(char * lpBuffer, int inBufSize)
   // 回复学生观看端 => 将老师推流端的序列头转发给学生观看端 => 由于没有P2P模式，观看端不用发送准备就绪命令...
   if( this->GetIdTag() == ID_TAG_LOOKER ) {
     bResult = this->doCreateForLooker(lpBuffer, inBufSize);
+    m_nTCPRoleType = GetApp()->GetTCPRoleType(m_rtp_create.tcpSock);
   }
   // 返回执行结果...
   return bResult;

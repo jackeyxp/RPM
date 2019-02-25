@@ -1,6 +1,14 @@
 
 #pragma once
 
+// define student role type...
+enum ROLE_TYPE
+{
+	kRoleWanRecv   = 0,      // 外网接收者角色
+	kRoleMultiRecv = 1,      // 组播接收者角色
+	kRoleMultiSend = 2,      // 组播发送者角色
+};
+
 // define client type...
 enum {
   kClientPHP       = 1,       // 网站端链接...

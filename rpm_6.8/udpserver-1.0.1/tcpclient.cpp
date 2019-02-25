@@ -19,6 +19,7 @@ CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nHostPort, stri
   , m_nHostPort(nHostPort)
   , m_strSinAddr(strSinAddr)
   , m_lpTCPThread(lpTCPThread)
+  , m_nRoleType(kRoleWanRecv)
 {
   assert(m_nConnFD > 0 && m_strSinAddr.size() > 0 );
   assert(m_lpTCPThread != NULL);
@@ -237,6 +238,7 @@ int CTCPClient::doCmdStudentLogin()
 {
   // 处理学生端登录过程 => 判断传递JSON数据有效性...
   if( m_MapJson.find("mac_addr") == m_MapJson.end() ||
+    m_MapJson.find("role_type") == m_MapJson.end() ||
     m_MapJson.find("ip_addr") == m_MapJson.end() ||
     m_MapJson.find("room_id") == m_MapJson.end() ||
     m_MapJson.find("pc_name") == m_MapJson.end() ) {
@@ -248,6 +250,7 @@ int CTCPClient::doCmdStudentLogin()
   m_strRoomID  = m_MapJson["room_id"];
   m_strPCName  = m_MapJson["pc_name"];
   m_nRoomID = atoi(m_strRoomID.c_str());
+  m_nRoleType = (ROLE_TYPE)atoi(m_MapJson["role_type"].c_str());
   // 创建或更新房间，更新房间里的学生端...
   m_lpTCPRoom = m_lpTCPThread->doCreateRoom(m_nRoomID);
   m_lpTCPRoom->doCreateStudent(this);
