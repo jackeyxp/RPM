@@ -46,7 +46,7 @@ bool CApp::doProcessCmdLine(int argc, char * argv[])
     case 'h':
     case 'v':
       log_trace("-d: Run as Debug Mode => mount on Debug student and Debug teacher.");
-      log_trace("-r: Run as Release Mode => mount on Release student and Debug teacher.");
+      log_trace("-r: Run as Release Mode => mount on Release student and Release teacher.");
       log_trace("-s: Send SIG signal to shutdown udpserver.");
       bExitFlag = true;
       break;

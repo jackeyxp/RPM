@@ -263,12 +263,9 @@ void CTCPThread::doTCPCenterEvent(int nEvent)
   // 响应中心套接字事件，成功，直接返回...
   if( m_lpTCPCenter->doEpollEvent(nEvent) >= 0 )
     return;
-  // 处理中心套接字事件，失败，重建套接字...
-  delete m_lpTCPCenter; m_lpTCPCenter = NULL;
-  m_lpTCPCenter = new CTCPCenter(this);
-  m_lpTCPCenter->InitTCPCenter(m_epoll_fd);
-  // 打印信息，提示重建中心对象完毕...
-  log_trace("TCP-Center has been rebuild.");
+  // 删除对象，等待重建...
+  delete m_lpTCPCenter;
+  m_lpTCPCenter = NULL;
 }
 
 void CTCPThread::doTCPListenEvent()
@@ -369,40 +366,42 @@ void CTCPThread::Entry()
     for(int n = 0; n < nfds; ++n) {
       // 处理服务器socket事件...
       int nCurEventFD = m_events[n].data.fd;
-			if( nCurEventFD == m_listen_fd ) {
-        // 处理监听套接字事件...
+      // 处理主监听套接字事件...
+      if( nCurEventFD == m_listen_fd ) {
         this->doTCPListenEvent();
-      } else if( nCurEventFD == m_lpTCPCenter->GetConnFD() ) {
-        // 响应中心套接字事件的处理过程...
+        continue;
+      }
+      // 响应中心套接字事件的处理过程...
+      if( m_lpTCPCenter != NULL && nCurEventFD == m_lpTCPCenter->GetConnFD() ) {
         this->doTCPCenterEvent(m_events[n].events);
-     } else {
-        // 注意：套接字的读写命令，没有用线程保护...
-        // 注意：目的是为了防止UDP删除命令先到达造成的互锁问题...
-        int nRetValue = -1;
-        if( m_events[n].events & EPOLLIN ) {
-          nRetValue = this->doHandleRead(nCurEventFD);
-        } else if( m_events[n].events & EPOLLOUT ) {
-          nRetValue = this->doHandleWrite(nCurEventFD);
+        continue;
+      }
+      // 注意：套接字的读写命令，没有用线程保护...
+      // 注意：目的是为了防止UDP删除命令先到达造成的互锁问题...
+      int nRetValue = -1;
+      if( m_events[n].events & EPOLLIN ) {
+        nRetValue = this->doHandleRead(nCurEventFD);
+      } else if( m_events[n].events & EPOLLOUT ) {
+        nRetValue = this->doHandleWrite(nCurEventFD);
+      }
+      // 判断事件处理结果...
+      if( nRetValue < 0 ) {
+        // 进入线程互斥保护 => 套接字被删除...
+        pthread_mutex_lock(&m_mutex);
+        // 处理失败，从epoll队列中删除...
+        struct epoll_event evDelete = {0};
+        evDelete.data.fd = nCurEventFD;
+        evDelete.events = EPOLLIN | EPOLLET;
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, nCurEventFD, &evDelete);
+        // 删除对应的客户端连接对象...
+        if( m_MapConnect.find(nCurEventFD) != m_MapConnect.end() ) {
+          delete m_MapConnect[nCurEventFD];
+          m_MapConnect.erase(nCurEventFD);
         }
-        // 判断事件处理结果...
-        if( nRetValue < 0 ) {
-          // 进入线程互斥保护 => 套接字被删除...
-          pthread_mutex_lock(&m_mutex);
-          // 处理失败，从epoll队列中删除...
-          struct epoll_event evDelete = {0};
-          evDelete.data.fd = nCurEventFD;
-          evDelete.events = EPOLLIN | EPOLLET;
-          epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, nCurEventFD, &evDelete);
-          // 删除对应的客户端连接对象...
-          if( m_MapConnect.find(nCurEventFD) != m_MapConnect.end() ) {
-            delete m_MapConnect[nCurEventFD];
-            m_MapConnect.erase(nCurEventFD);
-          }
-          // 关闭套接字..
-          close(nCurEventFD);
-          // 退出线程互斥保护 => 套接字被删除...
-          pthread_mutex_unlock(&m_mutex);  
-        }
+        // 关闭套接字..
+        close(nCurEventFD);
+        // 退出线程互斥保护 => 套接字被删除...
+        pthread_mutex_unlock(&m_mutex);  
       }
     }
   }
@@ -466,6 +465,12 @@ int CTCPThread::doHandleWrite(int connfd)
 // 处理epoll超时事件...
 void CTCPThread::doHandleTimeout()
 {
+  // 打印信息，提示重建中心对象完毕...
+  if( m_lpTCPCenter == NULL ) {
+    m_lpTCPCenter = new CTCPCenter(this);
+    m_lpTCPCenter->InitTCPCenter(m_epoll_fd);
+    log_trace("TCP-Center has been rebuild.");
+  }
   // 查看中心套接字的连接超时状态...
   if( m_lpTCPCenter != NULL ) {
     m_lpTCPCenter->doHandleTimeout();
