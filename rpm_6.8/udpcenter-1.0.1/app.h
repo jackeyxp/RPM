@@ -17,6 +17,7 @@ public:
   bool         doInitRLimit();
   void         doWaitForExit();
 public:
+  uint32_t       GetRefCounterID() { return ++m_uRefCounterID; }
   GM_MapServer & GetMapServer() { return m_MapServer; }
   CTCPThread   * GetTCPThread() { return m_lpTCPThread; }
   CUdpServer   * doFindMinUdpServer();
@@ -33,6 +34,7 @@ private:
   CTCPThread   *    m_lpTCPThread;    // TCP监听线程对象...
   GM_MapServer      m_MapServer;      // UDP服务器集合列表...
   GM_MapRoom        m_MapRoom;        // 房间对象集合列表...
+  uint32_t          m_uRefCounterID;  // 终端引用计数器编号...
 };
 
 class CUdpServer

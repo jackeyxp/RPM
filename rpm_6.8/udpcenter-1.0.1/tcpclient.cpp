@@ -19,6 +19,7 @@ CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nHostPort, stri
   assert(m_lpTCPThread != NULL);
   m_nStartTime = time(NULL);
   m_epoll_fd = m_lpTCPThread->GetEpollFD();
+  m_uTcpTimeID = GetApp()->GetRefCounterID();
 }
 
 CTCPClient::~CTCPClient()
@@ -111,8 +112,10 @@ int CTCPClient::ForRead()
     // 对数据进行用户类型分发...
     switch( m_nClientType )
     {
-      case kClientPHP:        nResult = this->doPHPClient(lpCmdHeader, lpDataPtr); break;
-      case kClientUdpServer:  nResult = this->doUdpServerClient(lpCmdHeader, lpDataPtr); break;
+      case kClientPHP:       nResult = this->doPHPClient(lpCmdHeader, lpDataPtr); break;
+      case kClientStudent:   nResult = this->doStudentClient(lpCmdHeader, lpDataPtr); break;
+      case kClientTeacher:   nResult = this->doTeacherClient(lpCmdHeader, lpDataPtr); break;
+      case kClientUdpServer: nResult = this->doUdpServerClient(lpCmdHeader, lpDataPtr); break;
     }
 		// 删除已经处理完毕的数据 => Header + pkg_len...
 		m_strRecv.erase(0, lpCmdHeader->m_pkg_len + sizeof(Cmd_Header));
@@ -122,6 +125,78 @@ int CTCPClient::ForRead()
     // 如果没有错误，继续执行...
     assert( nResult >= 0 );
   }  
+  return 0;
+}
+
+// 处理Student事件...
+int CTCPClient::doStudentClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
+{
+  int nResult = -1;
+  switch(lpHeader->m_cmd)
+  {
+    case kCmd_Student_Login:      nResult = this->doCmdStudentLogin(); break;
+    case kCmd_Student_OnLine:     nResult = this->doCmdStudentOnLine(); break;
+  }
+  // 默认全部返回正确...
+  return 0;
+}
+
+// 处理Student登录事件...
+int CTCPClient::doCmdStudentLogin()
+{
+  // 构造转发JSON数据块 => 返回套接字+时间戳...
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "tcp_socket", json_object_new_int(m_nConnFD));
+  json_object_object_add(new_obj, "tcp_time", json_object_new_int(m_uTcpTimeID));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendCommonCmd(kCmd_Student_Login, lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+// 处理Student在线汇报命令...
+int CTCPClient::doCmdStudentOnLine()
+{
+  return 0;
+}
+
+// 处理Teacher事件...
+int CTCPClient::doTeacherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
+{
+  int nResult = -1;
+  switch(lpHeader->m_cmd)
+  {
+    case kCmd_Teacher_Login:      nResult = this->doCmdTeacherLogin(); break;
+    case kCmd_Teacher_OnLine:     nResult = this->doCmdTeacherOnLine(); break;    
+  }
+  // 默认全部返回正确...
+  return 0;
+}
+
+// 处理Teacher登录事件...
+int CTCPClient::doCmdTeacherLogin()
+{
+  // 构造转发JSON数据块 => 返回套接字...
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "tcp_socket", json_object_new_int(m_nConnFD));
+  json_object_object_add(new_obj, "tcp_time", json_object_new_int(m_uTcpTimeID));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendCommonCmd(kCmd_Teacher_Login, lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+// 处理Teacher在线汇报命令...
+int CTCPClient::doCmdTeacherOnLine()
+{
   return 0;
 }
 
@@ -136,9 +211,71 @@ int CTCPClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     case kCmd_PHP_GetAllClient:   nResult = this->doCmdPHPGetAllClient(); break;
     case kCmd_PHP_GetRoomList:    nResult = this->doCmdPHPGetRoomList(); break;
     case kCmd_PHP_GetPlayerList:  nResult = this->doCmdPHPGetPlayerList(); break;
+    case kCmd_PHP_Bind_Mini:      nResult = this->doTransferBindMini(lpJsonPtr, lpHeader->m_pkg_len); break;
   }
   // 默认全部返回正确...
   return 0;
+}
+
+// 处理PHP发送的小程序绑定登录命令...
+int CTCPClient::doTransferBindMini(const char * lpJsonPtr, int nJsonSize)
+{
+  // 准备反馈需要的变量...
+  int nErrCode = ERR_OK;
+  // 创建反馈的json数据包...
+  json_object * new_obj = json_object_new_object();
+  do {
+    // 判断传递JSON数据有效性 => 必须包含client_type|tcp_socket|tcp_time|room_id字段信息...
+    if( m_MapJson.find("client_type") == m_MapJson.end() || 
+        m_MapJson.find("tcp_socket") == m_MapJson.end() ||
+        m_MapJson.find("tcp_time") == m_MapJson.end() ||
+        m_MapJson.find("room_id") == m_MapJson.end() ) {
+      nErrCode = ERR_NO_PARAM;
+      break;
+    }
+    // 获取传递过来的反向终端套接字编号|用户类型|时间戳...
+    int nRoomID = atoi(m_MapJson["room_id"].c_str());
+    int nTypeID = atoi(m_MapJson["client_type"].c_str());
+    int nSocketFD = atoi(m_MapJson["tcp_socket"].c_str());
+    uint32_t uTcpTimeID = (uint32_t)atoi(m_MapJson["tcp_time"].c_str());
+    CTCPThread * lpTCPThread = GetApp()->GetTCPThread();
+    GM_MapTCPConn & theMapConn = lpTCPThread->GetMapConnect();
+    GM_MapTCPConn::iterator itorItem = theMapConn.find(nSocketFD);
+    if (itorItem == theMapConn.end()) {
+      nErrCode = ERR_NO_TERMINAL;
+      break;
+    }
+    // 得到当前终端的对象，终端类型不匹配，返回错误...
+    CTCPClient * lpTCPClient = itorItem->second;
+    if (nTypeID != lpTCPClient->GetClientType()) {
+      nErrCode = ERR_TYPE_MATCH;
+      break;
+    }
+    // 如果时间标识符不一致，直接返回错误...
+    if (uTcpTimeID != lpTCPClient->GetTcpTimeID()) {
+      nErrCode = ERR_TIME_MATCH;
+      break;
+    }
+    // 如果是讲师端登录，需要验证当前选择的房间是否已经有讲师登录...
+    CTCPRoom * lpTCPRoom = GetApp()->doFindTCPRoom(nRoomID);
+    if (nTypeID == kClientTeacher && lpTCPRoom != NULL && lpTCPRoom->GetTeacherCount() > 0) {
+      nErrCode = ERR_HAS_TEACHER;
+      break;
+    }
+    // 直接调用该有效终端的转发命令接口...
+    int nReturn = lpTCPClient->doSendCommonCmd(kCmd_PHP_Bind_Mini, lpJsonPtr, nJsonSize);
+  } while ( false );
+  // 组合错误信息内容...
+  json_object_object_add(new_obj, "err_code", json_object_new_int(nErrCode));
+  json_object_object_add(new_obj, "err_cmd", json_object_new_int(kCmd_PHP_Bind_Mini));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendPHPResponse(lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;  
 }
 
 // 处理PHP发送的查询指定服务器的房间列表...

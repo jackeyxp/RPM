@@ -135,7 +135,6 @@ int CTCPClient::ForRead()
     // 对数据进行用户类型分发...
     switch( m_nClientType )
     {
-      case kClientPHP:      nResult = this->doPHPClient(lpCmdHeader, lpDataPtr); break;
       case kClientStudent:  nResult = this->doStudentClient(lpCmdHeader, lpDataPtr); break;
       case kClientTeacher:  nResult = this->doTeacherClient(lpCmdHeader, lpDataPtr); break;
     }
@@ -147,12 +146,6 @@ int CTCPClient::ForRead()
     // 如果没有错误，继续执行...
     assert( nResult >= 0 );
   }  
-  return 0;
-}
-
-// 处理PHP客户端事件...
-int CTCPClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
-{
   return 0;
 }
 

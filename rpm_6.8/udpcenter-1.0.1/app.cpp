@@ -4,6 +4,7 @@
 
 CApp::CApp()
   : m_sem_t(NULL)
+  , m_uRefCounterID(0)
   , m_lpTCPThread(NULL)
 {
   // 初始化辅助线程信号量...

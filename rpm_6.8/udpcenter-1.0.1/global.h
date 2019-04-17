@@ -94,6 +94,11 @@ typedef map<string, string>     GM_MapJson;       // key        => value => JSON
 #define ERR_NO_ROOM     10001
 #define ERR_NO_SERVER   10002
 #define ERR_MODE_MATCH  10003
+#define ERR_NO_PARAM    10004
+#define ERR_NO_TERMINAL 10005
+#define ERR_TYPE_MATCH  10006
+#define ERR_TIME_MATCH  10007
+#define ERR_HAS_TEACHER 10008
 
 ///////////////////////////////////////////////////////////
 // Only for PHP transmit server...
