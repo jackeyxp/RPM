@@ -39,7 +39,7 @@ private:
   int       doCmdTeacherOnLine();
   int       doCmdTeacherCameraLiveStop();
   int       doCmdTeacherCameraLiveStart();
-  int       doCmdTeacherCameraOnLineList();
+  int       doCmdCommonCameraOnLineList();
   int       doTransferCameraPTZByTeacher(const char * lpJsonPtr, int nJsonSize);
   int       doTransferCameraLiveCmdByTeacher(int nCmdID, int nDBCameraID);
   int       doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine);

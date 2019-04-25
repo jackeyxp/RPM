@@ -160,6 +160,7 @@ int CTCPClient::doStudentClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     case kCmd_Camera_LiveStop:    nResult = this->doCmdStudentCameraLiveStop(); break;
     case kCmd_Camera_PullStop:    nResult = this->doCmdStudentCameraPullStop(); break;
     case kCmd_Camera_PullStart:   nResult = this->doCmdStudentCameraPullStart(); break;
+    case kCmd_Camera_OnLineList:  nResult = this->doCmdCommonCameraOnLineList(); break;
   }
   // 默认全部返回正确...
   return 0;
@@ -338,7 +339,7 @@ int CTCPClient::doTeacherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
     case kCmd_Teacher_OnLine:     nResult = this->doCmdTeacherOnLine(); break;
     case kCmd_Camera_LiveStop:    nResult = this->doCmdTeacherCameraLiveStop(); break;
     case kCmd_Camera_LiveStart:   nResult = this->doCmdTeacherCameraLiveStart(); break;
-    case kCmd_Camera_OnLineList:  nResult = this->doCmdTeacherCameraOnLineList(); break;
+    case kCmd_Camera_OnLineList:  nResult = this->doCmdCommonCameraOnLineList(); break;
     case kCmd_Camera_PTZCommand:  nResult = this->doTransferCameraPTZByTeacher(lpJsonPtr, lpHeader->m_pkg_len); break;
   }
   // 默认全部返回正确...
@@ -511,8 +512,8 @@ int CTCPClient::doSendCmdLoginForTeacher(int nSceneItemID, int inDBCameraID, boo
   return nResult;
 }
 
-// 处理Teacher获取房间里的在线摄像头列表...
-int CTCPClient::doCmdTeacherCameraOnLineList()
+// 处理Teacher|Student获取房间里的在线摄像头列表...
+int CTCPClient::doCmdCommonCameraOnLineList()
 {
   // 获取当前房间里的在线摄像头通道列表集合...
   GM_MapTCPCamera & theMapCamera = m_lpTCPRoom->GetMapCamera();
