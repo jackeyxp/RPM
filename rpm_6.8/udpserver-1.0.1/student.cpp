@@ -81,6 +81,7 @@ bool CStudent::doServerSendDetect()
   return this->doTransferToFrom((char*)&m_server_rtp_detect, sizeof(m_server_rtp_detect));
 }
 
+// 学生推流者 => 计算已接收到的最大连续的序号包...
 uint32_t CStudent::doCalcMaxConSeq(bool bIsAudio)
 {
   // 根据数据包类型，找到丢包集合、环形队列、最大播放包...
@@ -586,7 +587,8 @@ void CStudent::doTagAVPackProcess(char * lpBuffer, int inBufSize)
 		return;
 	}
 	// 如果是其它未知包，打印信息...
-	log_trace("[%s-%s] Supply Unknown => Seq: %u, Slice: %d, Min-Max: [%u, %u], Type: %d", lpTMTag, lpIDTag, new_id, lpNewHeader->psize, min_id, max_id, pt_tag);
+	log_trace("[%s-%s] Supply Unknown => Seq: %u, Slice: %d, Min-Max: [%u, %u], Type: %d",
+             lpTMTag, lpIDTag, new_id, lpNewHeader->psize, min_id, max_id, pt_tag);
 }
 //
 // 查看当前包是否需要从丢包队列中删除...
@@ -869,31 +871,4 @@ bool CStudent::doTransferToTeacherLooker(char * lpBuffer, int inBufSize)
     return false;
   // 将数据命令包转发给房间里的老师观看者对象...
   return lpTeacher->doTransferToFrom(lpBuffer, inBufSize);
-}
-
-// 原路返回的转发接口 => 观看者|推流者都可以原路返回...
-bool CStudent::doTransferToFrom(char * lpBuffer, int inBufSize)
-{
-  // 判断输入的缓冲区是否有效...
-  if( lpBuffer == NULL || inBufSize <= 0 )
-    return false;
-   // 获取需要的相关变量信息...
-  uint32_t nHostAddr = this->GetHostAddr();
-  uint16_t nHostPort = this->GetHostPort();
-  int listen_fd = GetApp()->GetListenFD();
-  if( listen_fd <= 0 || nHostAddr <= 0 || nHostPort <= 0 )
-    return false;
-  // 构造返回的接收地址...
-	sockaddr_in addrFrom = {0};
-	addrFrom.sin_family = AF_INET;
-	addrFrom.sin_port = htons(nHostPort);
-	addrFrom.sin_addr.s_addr = htonl(nHostAddr);
-  // 将数据信息转发给学生观看者对象...
-  if( sendto(listen_fd, lpBuffer, inBufSize, 0, (sockaddr*)&addrFrom, sizeof(addrFrom)) < 0 ) {
-    log_trace("sendto error(code:%d, %s)", errno, strerror(errno));
-    return false;
-  }
-  //log_debug("[Transfer] Size: %d", inBufSize);
-  // 发送成功...
-  return true; 
 }

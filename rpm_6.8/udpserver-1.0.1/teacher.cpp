@@ -831,30 +831,3 @@ bool CTeacher::doTransferToStudentLooker(char * lpBuffer, int inBufSize)
   // 转发命令数据包到所有房间里的学生在线观看者...
   return m_lpRoom->doTeacherPusherToStudentLooker(lpBuffer, inBufSize);
 }
-
-// 原路返回的转发接口 => 观看者|推流者都可以原路返回...
-bool CTeacher::doTransferToFrom(char * lpBuffer, int inBufSize)
-{
-  // 判断输入的缓冲区是否有效...
-  if( lpBuffer == NULL || inBufSize <= 0 )
-    return false;
-   // 获取需要的相关变量信息...
-  uint32_t nHostAddr = this->GetHostAddr();
-  uint16_t nHostPort = this->GetHostPort();
-  int listen_fd = GetApp()->GetListenFD();
-  if( listen_fd <= 0 || nHostAddr <= 0 || nHostPort <= 0 )
-    return false;
-  // 构造返回的接收地址...
-	sockaddr_in addrFrom = {0};
-	addrFrom.sin_family = AF_INET;
-	addrFrom.sin_port = htons(nHostPort);
-	addrFrom.sin_addr.s_addr = htonl(nHostAddr);
-  // 将数据信息转发给学生观看者对象...
-  if( sendto(listen_fd, lpBuffer, inBufSize, 0, (sockaddr*)&addrFrom, sizeof(addrFrom)) < 0 ) {
-    log_trace("sendto error(code:%d, %s)", errno, strerror(errno));
-    return false;
-  }
-  //log_debug("[Transfer] Size: %d", inBufSize);
-  // 发送成功...
-  return true; 
-}

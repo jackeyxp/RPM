@@ -15,7 +15,6 @@ public:
   circlebuf  &  GetVideoCircle() { return m_video_circle; }
 public:
   uint32_t      doCalcMinSeq(bool bIsAudio);
-  bool          doTransferToFrom(char * lpBuffer, int inBufSize);
   bool          doIsTeacherPusherLose(bool bIsAudio, uint32_t inLoseSeq);
 protected:
   virtual bool  doTagDetect(char * lpBuffer, int inBufSize);

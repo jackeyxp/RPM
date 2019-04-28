@@ -17,7 +17,6 @@ public:
   void          SetCanDetect(bool bFlag) { m_bIsCanDetect = bFlag; }
 public:
   uint32_t      doCalcMinSeq(bool bIsAudio);
-  bool          doTransferToFrom(char * lpBuffer, int inBufSize);
   bool          doIsStudentPusherLose(bool bIsAudio, uint32_t inLoseSeq);
 protected:
   virtual bool  doTagDetect(char * lpBuffer, int inBufSize);
@@ -61,5 +60,5 @@ private:
   GM_MapLose    m_AudioMapLose;			  // 推流端检测|观看端上报的音频丢包集合队列...
   GM_MapLose    m_VideoMapLose;			  // 推流端检测|观看端上报的视频丢包集合队列...
   GM_MapLose    m_Ex_AudioMapLose;		// 推流端无效|观看端上报的扩展音频丢包集合队列...
-  CUDPThread  * m_lpUDPThread; 
+  CUDPThread  * m_lpUDPThread;        // UDP线程对象...
 };

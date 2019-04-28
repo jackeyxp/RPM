@@ -22,6 +22,7 @@ public:
   bool          GetDeleteByTCP() { return m_bIsDeleteByTCP; }
   bool          GetDeleteByUDP() { return m_bIsDeleteByUDP; }
   bool          doProcess(uint8_t ptTag, char * lpBuffer, int inBufSize);
+  bool          doTransferToFrom(char * lpBuffer, int inBufSize);
 public:
   virtual bool  doServerSendDetect() = 0;
   virtual int   doServerSendSupply() = 0;
