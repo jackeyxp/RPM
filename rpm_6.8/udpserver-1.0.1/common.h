@@ -42,6 +42,7 @@ enum {
   kCmd_PHP_GetRoomList      = 21,
   kCmd_PHP_GetPlayerList    = 22,
   kCmd_PHP_Bind_Mini        = 23,
+  kCmd_PHP_GetRoomFlow      = 24,
 };
 
 // define the command header...
@@ -51,3 +52,22 @@ typedef struct {
   int   m_cmd;        // command id...
   int   m_sock;       // php sock in transmit...
 } Cmd_Header;
+
+///////////////////////////////////////////////////////////
+// Only for PHP transmit server...
+//////////////////////////////////////////////////////////
+typedef struct {
+	char  pkg_len[8];  // body length, not including header
+	char  cmd;         // command code
+	char  status;      // status code for response
+} TrackerHeader;
+
+#define ERR_OK          0
+#define ERR_NO_ROOM     10001
+#define ERR_NO_SERVER   10002
+#define ERR_MODE_MATCH  10003
+#define ERR_NO_PARAM    10004
+#define ERR_NO_TERMINAL 10005
+#define ERR_TYPE_MATCH  10006
+#define ERR_TIME_MATCH  10007
+#define ERR_HAS_TEACHER 10008

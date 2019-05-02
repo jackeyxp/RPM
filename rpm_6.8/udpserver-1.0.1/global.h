@@ -84,6 +84,9 @@ const char * get_tm_tag(int tmTag);
 const char * get_id_tag(int idTag);
 const char * get_abs_path();
 
+int64_t buff2long(const char *buff);
+void long2buff(int64_t n, char *buff);
+
 //////////////////////////////////////////////////////////////////////////
 // 以下是有关TCP中转服务器的相关变量和类型定义...
 //////////////////////////////////////////////////////////////////////////

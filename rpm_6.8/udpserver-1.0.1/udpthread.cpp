@@ -354,6 +354,18 @@ void CUDPThread::doDelLoseForLooker(CNetwork * lpLooker)
   m_ListLooker.remove(lpLooker);
 }
 
+bool CUDPThread::GetRoomFlow(int inRoomID, int & outUpFlowMB, int & outDownFlowMB)
+{
+  CRoom * lpRoom = NULL;
+  GM_MapRoom::iterator itorRoom = m_MapRoom.find(inRoomID);
+  if (itorRoom == m_MapRoom.end())
+    return false;
+  lpRoom = itorRoom->second;
+  outUpFlowMB = lpRoom->GetUpFlowMB();
+  outDownFlowMB = lpRoom->GetDownFlowMB();
+  return true;
+}
+
 // 创建房间 => 通过房间号进行创建...
 CRoom * CUDPThread::doCreateRoom(int inRoomID)
 {

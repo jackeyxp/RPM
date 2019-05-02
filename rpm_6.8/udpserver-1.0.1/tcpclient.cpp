@@ -4,6 +4,7 @@
 #include "tcpclient.h"
 #include "tcpthread.h"
 #include "tcpcamera.h"
+#include "udpthread.h"
 #include <json/json.h>
 
 #define MAX_PATH_SIZE           260
@@ -12,6 +13,7 @@
 
 CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nHostPort, string & strSinAddr)
   : m_nRoomID(0)
+  , m_nDBFlowID(0)
   , m_nClientType(0)
   , m_nConnFD(connfd)
   , m_nSceneItemID(0)
@@ -135,6 +137,7 @@ int CTCPClient::ForRead()
     // 对数据进行用户类型分发...
     switch( m_nClientType )
     {
+      case kClientPHP:      nResult = this->doPHPClient(lpCmdHeader, lpDataPtr); break;
       case kClientStudent:  nResult = this->doStudentClient(lpCmdHeader, lpDataPtr); break;
       case kClientTeacher:  nResult = this->doTeacherClient(lpCmdHeader, lpDataPtr); break;
     }
@@ -146,6 +149,85 @@ int CTCPClient::ForRead()
     // 如果没有错误，继续执行...
     assert( nResult >= 0 );
   }  
+  return 0;
+}
+
+// 处理PHP客户端事件...
+int CTCPClient::doPHPClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
+{
+  int nResult = -1;
+  switch(lpHeader->m_cmd)
+  {
+    case kCmd_PHP_GetRoomFlow:   nResult = this->doCmdPHPGetRoomFlow(); break;
+  }
+  // 默认全部返回正确...
+  return 0;
+}
+
+// 处理获取指定房间里上行下行的流量统计...
+int CTCPClient::doCmdPHPGetRoomFlow()
+{
+  // 准备反馈需要的变量...
+  int nErrCode = ERR_OK;
+  // 创建反馈的json数据包...
+  json_object * new_obj = json_object_new_object();
+  do {
+    // 判断传递JSON数据有效性 => 必须包含room_id|flow_id字段信息...
+    if(m_MapJson.find("room_id") == m_MapJson.end() || m_MapJson.find("flow_id") == m_MapJson.end()) {
+      nErrCode = ERR_NO_PARAM;
+      break;
+    }
+    // 解析已经获取的room_id|flow_id具体内容...
+    int nDBRoomID = atoi(m_MapJson["room_id"].c_str());
+    int nDBFlowID = atoi(m_MapJson["flow_id"].c_str());
+    // 需要根据room_id查找tcp房间对象和udp房间对象...
+    if(!m_lpTCPThread->doCheckFlowID(nDBRoomID, nDBFlowID)) {
+      nErrCode = ERR_NO_PARAM;
+      break;
+    }
+    // 验证通过之后，获取udp房间里的上行下行流量统计...
+    int nUpFlowMB = 0; int nDownFlowMB = 0;
+    CUDPThread * lpUdpThread = GetApp()->GetUdpThread();
+    lpUdpThread->GetRoomFlow(nDBRoomID, nUpFlowMB, nDownFlowMB);
+    json_object_object_add(new_obj, "up_flow", json_object_new_int(nUpFlowMB));
+    json_object_object_add(new_obj, "down_flow", json_object_new_int(nDownFlowMB));
+  } while( false );
+  // 组合错误信息内容...
+  json_object_object_add(new_obj, "err_code", json_object_new_int(nErrCode));
+  json_object_object_add(new_obj, "err_cmd", json_object_new_int(kCmd_PHP_GetRoomFlow));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendPHPResponse(lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+// PHP专用的反馈接口函数...
+int CTCPClient::doSendPHPResponse(const char * lpJsonPtr, int nJsonSize)
+{
+  // PHP反馈需要的是TrackerHeader结构体...
+  TrackerHeader theTracker = {0};
+  char szSendBuf[MAX_LINE_SIZE] = {0};
+  int nBodyLen = nJsonSize;
+  // 组合TrackerHeader包头，方便php扩展使用 => 只需要设置pkg_len，其它置0...
+  long2buff(nBodyLen, theTracker.pkg_len);
+  memcpy(szSendBuf, &theTracker, sizeof(theTracker));
+  memcpy(szSendBuf+sizeof(theTracker), lpJsonPtr, nBodyLen);
+  // 将发送数据包缓存起来，等待发送事件到来...
+  m_strSend.assign(szSendBuf, nBodyLen+sizeof(theTracker));
+  // 向当前终端对象发起发送数据事件...
+  epoll_event evClient = {0};
+  evClient.data.fd = m_nConnFD;
+  evClient.events = EPOLLOUT | EPOLLET;
+  // 重新修改事件，加入写入事件...
+  if( epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, m_nConnFD, &evClient) < 0 ) {
+    log_trace("mod socket '%d' to epoll failed: %s", m_nConnFD, strerror(errno));
+    return -1;
+  }
+  // 返回执行正确...
   return 0;
 }
 
@@ -469,7 +551,8 @@ int CTCPClient::doCmdTeacherLogin()
     m_MapJson.find("ip_addr") == m_MapJson.end() ||
     m_MapJson.find("room_id") == m_MapJson.end() ||
     m_MapJson.find("camera_id") == m_MapJson.end() ||
-    m_MapJson.find("sitem_id") == m_MapJson.end() ) {
+    m_MapJson.find("sitem_id") == m_MapJson.end() ||
+    m_MapJson.find("flow_id") == m_MapJson.end() ) {
     return -1;
   }
   // 保存解析到的有效JSON数据项...
@@ -477,6 +560,7 @@ int CTCPClient::doCmdTeacherLogin()
   m_strIPAddr  = m_MapJson["ip_addr"];
   m_strRoomID  = m_MapJson["room_id"];
   m_nRoomID = atoi(m_strRoomID.c_str());
+  m_nDBFlowID  = atoi(m_MapJson["flow_id"].c_str());
   // 创建或更新房间，更新房间里的讲师端...
   m_lpTCPRoom = m_lpTCPThread->doCreateRoom(m_nRoomID);
   m_lpTCPRoom->doCreateTeacher(this);

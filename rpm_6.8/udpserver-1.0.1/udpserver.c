@@ -395,6 +395,7 @@ const char * get_command_name(int inCmd)
     case kCmd_PHP_GetRoomList:      return "PHP_GetRoomList";
     case kCmd_PHP_GetPlayerList:    return "PHP_GetPlayerList";
     case kCmd_PHP_Bind_Mini:        return "PHP_Bind_Mini";
+    case kCmd_PHP_GetRoomFlow:      return "PHP_GetRoomFlow";
   }
   return "unknown";
 }
@@ -402,4 +403,32 @@ const char * get_command_name(int inCmd)
 const char * get_abs_path()
 {
   return g_absolute_path;
+}
+
+void long2buff(int64_t n, char *buff)
+{
+	unsigned char *p;
+	p = (unsigned char *)buff;
+	*p++ = (n >> 56) & 0xFF;
+	*p++ = (n >> 48) & 0xFF;
+	*p++ = (n >> 40) & 0xFF;
+	*p++ = (n >> 32) & 0xFF;
+	*p++ = (n >> 24) & 0xFF;
+	*p++ = (n >> 16) & 0xFF;
+	*p++ = (n >> 8) & 0xFF;
+	*p++ = n & 0xFF;
+}
+
+int64_t buff2long(const char *buff)
+{
+	unsigned char *p;
+	p = (unsigned char *)buff;
+	return  (((int64_t)(*p)) << 56) | \
+		(((int64_t)(*(p+1))) << 48) |  \
+		(((int64_t)(*(p+2))) << 40) |  \
+		(((int64_t)(*(p+3))) << 32) |  \
+		(((int64_t)(*(p+4))) << 24) |  \
+		(((int64_t)(*(p+5))) << 16) |  \
+		(((int64_t)(*(p+6))) << 8) | \
+		((int64_t)(*(p+7)));
 }

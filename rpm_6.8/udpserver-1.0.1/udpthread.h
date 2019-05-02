@@ -21,6 +21,7 @@ public:
   void        doDeleteForCameraLiveStop(int inRoomID);
   bool        IsUDPTeacherPusherOnLine(int inRoomID);
   bool        IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID);
+  bool        GetRoomFlow(int inRoomID, int & outUpFlowMB, int & outDownFlowMB);
   bool        onRecvEvent(uint32_t inHostAddr, uint16_t inHostPort, char * lpBuffer, int inBufSize);
 private:
   bool        doProcSocket(uint32_t nHostSinAddr, uint16_t nHostSinPort, char * lpBuffer, int inBufSize);

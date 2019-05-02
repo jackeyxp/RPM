@@ -33,6 +33,7 @@ public:
   ROLE_TYPE   GetTCPRoleType(int inTCPSockID);
   int         GetListenFD() { return m_listen_fd; }
   int         GetCenterPort() { return DEF_CENTER_PORT; }
+  CUDPThread* GetUdpThread() { return m_lpUDPThread; }
   const char* GetCenterAddr() { return DEF_CENTER_ADDR; }
   string   &  GetWanAddr() { return m_strWanAddr; }
   int         GetUdpPort() { return DEF_UDP_PORT; }

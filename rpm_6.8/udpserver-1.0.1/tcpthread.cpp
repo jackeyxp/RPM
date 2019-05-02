@@ -136,6 +136,20 @@ void CTCPThread::doUDPTeacherLookerDelete(int inRoomID, int inDBCameraID)
   } while( false );
 }
 
+// 比对房间里的老师登录时上传的流量编号是否一致...
+bool CTCPThread::doCheckFlowID(int inRoomID, int inFlowID)
+{
+  CTCPRoom * lpTCPRoom = NULL;
+  CTCPClient * lpTeacher = NULL;
+  GM_MapTCPRoom::iterator itorRoom = m_MapTCPRoom.find(inRoomID);
+  if (itorRoom == m_MapTCPRoom.end())
+    return false;
+  // 找到房间里老师并验证编号...
+  lpTCPRoom = itorRoom->second;
+  lpTeacher = lpTCPRoom->GetTCPTeacher();
+  return (((lpTeacher != NULL) && (lpTeacher->GetDBFlowID() == inFlowID)) ? true : false);
+}
+
 // 创建房间 => 通过房间号进行创建...
 CTCPRoom * CTCPThread::doCreateRoom(int inRoomID)
 {
@@ -502,10 +516,10 @@ void CTCPThread::doHandleTimeout()
   }  
 }
 
-int CTCPThread::doRoomCommand(int nCmdID, int nRoomID)
+int CTCPThread::doRoomCommand(int inCmdID, int inRoomID)
 {
   if( m_lpTCPCenter == NULL )
     return -1;
   // 中心套接字有效，转发计数器变化通知...
-  return m_lpTCPCenter->doRoomCommand(nCmdID, nRoomID);
+  return m_lpTCPCenter->doRoomCommand(inCmdID, inRoomID);
 }

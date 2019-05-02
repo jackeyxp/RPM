@@ -18,7 +18,8 @@ public:
 public:
   bool        InitThread();                     // 初始化并启动线程...
   CTCPRoom *  doCreateRoom(int inRoomID);       // 创建或更新房间对象...
-  int         doRoomCommand(int nCmdID, int nRoomID);
+  int         doRoomCommand(int inCmdID, int inRoomID);
+  bool        doCheckFlowID(int inRoomID, int inFlowID);
   void        doIncreaseClient(int inSinPort, string & strSinAddr);
   void        doDecreaseClient(int inSinPort, string & strSinAddr);
   void        doUDPTeacherLookerDelete(int inRoomID, int inDBCameraID);

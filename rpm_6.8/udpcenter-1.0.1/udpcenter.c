@@ -268,6 +268,7 @@ const char * get_command_name(int inCmd)
     case kCmd_PHP_GetRoomList:      return "PHP_GetRoomList";
     case kCmd_PHP_GetPlayerList:    return "PHP_GetPlayerList";
     case kCmd_PHP_Bind_Mini:        return "PHP_Bind_Mini";
+    case kCmd_PHP_GetRoomFlow:      return "PHP_GetRoomFlow";
   }
   return "unknown";
 }

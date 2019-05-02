@@ -77,8 +77,11 @@ bool CStudent::doServerSendDetect()
   // 计算已收到音视频最大连续包号...
   m_server_rtp_detect.maxAConSeq = this->doCalcMaxConSeq(true);
   m_server_rtp_detect.maxVConSeq = this->doCalcMaxConSeq(false);
+  // 房间对象有效，累加房间下行流量...
+  int nFlowSize = sizeof(m_server_rtp_detect);
+  if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(nFlowSize); }
   // 将新构造的探测包转发给当前对象...
-  return this->doTransferToFrom((char*)&m_server_rtp_detect, sizeof(m_server_rtp_detect));
+  return this->doTransferToFrom((char*)&m_server_rtp_detect, nFlowSize);
 }
 
 // 学生推流者 => 计算已接收到的最大连续的序号包...
@@ -183,6 +186,8 @@ void CStudent::doEarseAudioByPTS(uint32_t inTimeStamp)
 
 bool CStudent::doTagDetect(char * lpBuffer, int inBufSize)
 {
+  // 房间对象有效，累加房间上行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddUpFlowByte(inBufSize); }
   // 学生观看者 => 只有一种探测包 => 学生观看者自己的探测包...
   // 学生观看者 => 将探测包原样返回给自己，计算网络往返延时...
   if( this->GetIdTag() == ID_TAG_LOOKER ) {
@@ -199,6 +204,7 @@ bool CStudent::doTagDetect(char * lpBuffer, int inBufSize)
   uint8_t ptTag = (lpBuffer[0] >> 4) & 0x0F;
   // 如果是 学生推流端 自己发出的探测包，原样反馈给学生推流者...
   if( tmTag == TM_TAG_STUDENT && idTag == ID_TAG_PUSHER ) {
+    if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(inBufSize); }
     return this->doTransferToFrom(lpBuffer, inBufSize);
   }
   // 只有学生推流者，服务器才会发送主动探测包...
@@ -261,6 +267,8 @@ bool CStudent::doDetectForLooker(char * lpBuffer, int inBufSize)
     lpDetect->maxAConSeq = lpTeacher->doCalcMinSeq(true);
     lpDetect->maxVConSeq = lpTeacher->doCalcMinSeq(false);
   }
+  // 房间对象有效，累加房间下行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(inBufSize); }
   // 将更新后的数据包反馈给学生观看端对象...
   return this->doTransferToFrom(lpBuffer, inBufSize);
 }
@@ -275,6 +283,8 @@ bool CStudent::doTagCreate(char * lpBuffer, int inBufSize)
   memcpy(&m_rtp_create, lpBuffer, sizeof(m_rtp_create));
   m_lpRoom = m_lpUDPThread->doCreateRoom(m_rtp_create.roomID);
   m_lpRoom->doCreateStudent(this);
+  // 房间对象有效，累加房间上行流量...
+  m_lpRoom->doAddUpFlowByte(inBufSize);
   // 回复学生推流端 => 房间已经创建成功，不要再发创建命令了...
   if( this->GetIdTag() == ID_TAG_PUSHER ) {
     bResult = this->doCreateForPusher(lpBuffer, inBufSize);
@@ -296,6 +306,8 @@ bool CStudent::doCreateForPusher(char * lpBuffer, int inBufSize)
   rtpHdr.tm = TM_TAG_SERVER;
   rtpHdr.id = ID_TAG_SERVER;
   rtpHdr.pt = PT_TAG_CREATE;
+  // 房间对象有效，累加房间下行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(sizeof(rtpHdr)); }
   // 回复学生推流端 => 房间已经创建成功，不要再发创建命令了...
   return this->doTransferToFrom((char*)&rtpHdr, sizeof(rtpHdr));
 }
@@ -314,6 +326,8 @@ bool CStudent::doCreateForLooker(char * lpBuffer, int inBufSize)
   string & strSeqHeader = lpTeacher->GetSeqHeader();
   if( strSeqHeader.size() <= 0 )
     return false;
+  // 房间对象有效，累加房间下行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(strSeqHeader.size()); }
   // 回复学生观看端 => 将老师推流端的序列头转发给学生观看端...
   return this->doTransferToFrom((char*)strSeqHeader.c_str(), strSeqHeader.size());
 }
@@ -348,6 +362,8 @@ bool CStudent::doTagSupply(char * lpBuffer, int inBufSize)
   memcpy(&rtpSupply, lpBuffer, nHeadSize);
   if( (rtpSupply.suSize <= 0) || ((nHeadSize + rtpSupply.suSize) != inBufSize) )
     return false;
+  // 房间对象有效，累加房间上行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddUpFlowByte(inBufSize); }
   // 根据数据包类型，找到丢包集合 => 新增扩展音频类型 => 学生推流端音频...
   GM_MapLose & theMapLose = ((rtpSupply.suType == PT_TAG_EX_AUDIO) ? m_Ex_AudioMapLose : 
                             ((rtpSupply.suType == PT_TAG_AUDIO) ? m_AudioMapLose : m_VideoMapLose));
@@ -427,6 +443,8 @@ bool CStudent::doTagHeader(char * lpBuffer, int inBufSize)
   // 只有学生推流端才会处理序列头命令...
   if( this->GetIdTag() != ID_TAG_PUSHER )
     return false;
+  // 房间对象有效，累加房间上行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddUpFlowByte(inBufSize); }
   // 将序列头保存起来，等待观看端接入时，转发给观看端...
   m_strSeqHeader.assign(lpBuffer, inBufSize);
   // 回复学生推流端 => 序列头已经收到，不要再发序列头命令了...
@@ -441,6 +459,8 @@ bool CStudent::doHeaderForPusher(char * lpBuffer, int inBufSize)
   rtpHdr.tm = TM_TAG_SERVER;
   rtpHdr.id = ID_TAG_SERVER;
   rtpHdr.pt = PT_TAG_HEADER;
+  // 房间对象有效，累加房间下行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(sizeof(rtpHdr)); }
   // 回复学生推流端 => 序列头已经收到，不要再发序列头命令了...
   return this->doTransferToFrom((char*)&rtpHdr, sizeof(rtpHdr));
 }
@@ -467,6 +487,8 @@ bool CStudent::doTagAudio(char * lpBuffer, int inBufSize)
   // 只有学生推流端才会处理音频包命令...
   if( this->GetIdTag() != ID_TAG_PUSHER )
     return false;
+  // 房间对象有效，累加房间上行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddUpFlowByte(inBufSize); }
   // 将音频数据包缓存起来...
   this->doTagAVPackProcess(lpBuffer, inBufSize);
   // 转发音频数据包到房间里的老师观看者对象...
@@ -483,6 +505,8 @@ bool CStudent::doTagVideo(char * lpBuffer, int inBufSize)
   // 只有学生推流端才会处理视频包命令...
   if( this->GetIdTag() != ID_TAG_PUSHER )
     return false;
+  // 房间对象有效，累加房间上行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddUpFlowByte(inBufSize); }
   // 将视频数据包缓存起来...
   this->doTagAVPackProcess(lpBuffer, inBufSize);
   // 转发视频数据包到房间里的老师观看者...
@@ -752,7 +776,9 @@ int CStudent::doSendSupplyCmd(bool bIsAudio)
   int nDataSize = nHeadSize + rtpSupply.suSize;
   // 打印已发送补包命令...
   //log_debug("[%s-%s] Supply Send => Dir: %d, Count: %d, Audio: %d", lpTMTag, lpIDTag, DT_TO_SERVER, rtpSupply.suSize/sizeof(uint32_t), bIsAudio);
-  // 将补包命令转发给当前老师推流者对象...
+  // 房间对象有效，累加房间下行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(nDataSize); }
+   // 将补包命令转发给当前老师推流者对象...
   return this->doTransferToFrom(szPacketBuffer, nDataSize);
 }
 
@@ -855,6 +881,8 @@ void CStudent::doSendLosePacket(uint8_t inPType)
   //log_debug("[%s-%s] Lose Send => Seq: %u, TS: %u, Slice: %d, Type: %d",
   //          lpTMTag, lpIDTag, lpSendHeader->seq, lpSendHeader->ts,
   //          lpSendHeader->psize, lpSendHeader->pt);
+  // 房间对象有效，累加房间下行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(nSendSize); }
   // 回复学生观看端 => 发送补包命令数据内容...
   this->doTransferToFrom((char*)lpSendHeader, nSendSize);
 }
@@ -869,6 +897,8 @@ bool CStudent::doTransferToTeacherLooker(char * lpBuffer, int inBufSize)
   CTeacher * lpTeacher = m_lpRoom->GetTeacherLooker();
   if( lpTeacher == NULL )
     return false;
+  // 房间对象有效，累加房间下行流量...
+  if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(inBufSize); }
   // 将数据命令包转发给房间里的老师观看者对象...
   return lpTeacher->doTransferToFrom(lpBuffer, inBufSize);
 }

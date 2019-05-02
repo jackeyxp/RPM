@@ -10,6 +10,8 @@ CRoom::CRoom(int inRoomID)
   , m_lpTeacherLooker(NULL)
   , m_wExAudioChangeNum(0)
   , m_nRoomID(inRoomID)
+  , m_nDownFlowByte(0)
+  , m_nUpFlowByte(0)
 {
   
 }
@@ -143,6 +145,7 @@ bool CRoom::doTeacherPusherToStudentLooker(char * lpBuffer, int inBufSize)
   for(itorItem = m_MapStudentLooker.begin(); itorItem != m_MapStudentLooker.end(); ++itorItem) {
     CStudent * lpStudent = itorItem->second;
     if( lpStudent == NULL ) continue;
+    this->doAddDownFlowByte(inBufSize);
     lpStudent->doTransferToFrom(lpBuffer, inBufSize);
   }
   return true;
@@ -189,6 +192,8 @@ bool CRoom::doStudentPusherToStudentLooker(char * lpBuffer, int inBufSize)
     // 如果推流者tcpSock与观看者tcpSock一致，并且不是组播发送者角色，不要转发给这个观看者...
     if ((nTCPSockID == nPushSockID) && (nRoleType != kRoleMultiSend))
       continue;
+    // 累加房间下行流量...
+    this->doAddDownFlowByte(inBufSize);
     // 注意：终端是组播发送者，推流者和观看者tcpSock相同也要转发 => 为了保持组播数据一致...
     // 将学生推流者数据包转发给tcpSock不一致的学生观看者对象...
     lpStudent->doTransferToFrom(lpBuffer, inBufSize);
