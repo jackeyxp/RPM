@@ -305,7 +305,9 @@ int CTCPClient::doCmdStudentCameraPullStop()
     return -1;
   // 获取通道编号，用通道编号删除摄像头对象...
   int nDBCameraID = atoi(m_MapJson["camera_id"].c_str());
-  m_lpTCPRoom->doDeleteCamera(nDBCameraID);
+  if( m_lpTCPRoom != NULL ) {
+    m_lpTCPRoom->doDeleteCamera(nDBCameraID);
+  }
   return 0;
 }
 
@@ -435,7 +437,8 @@ int CTCPClient::doTransferCameraPTZByTeacher(const char * lpJsonPtr, int nJsonSi
   if( m_MapJson.find("camera_id") == m_MapJson.end() ||
     m_MapJson.find("speed_val") == m_MapJson.end() ||
     m_MapJson.find("cmd_id") == m_MapJson.end() ||
-    lpJsonPtr == NULL || nJsonSize <= 0 ) {
+    lpJsonPtr == NULL || nJsonSize <= 0 ||
+    m_lpTCPRoom == NULL ) {
     return -1;
   }
   // 获取讲师端传递过来的摄像头通道编号...
@@ -512,6 +515,9 @@ int CTCPClient::doCmdTeacherCameraLiveStart()
 // 处理Teacher发起的让学生端指定的摄像头开始|停止推流的命令...
 int CTCPClient::doTransferCameraLiveCmdByTeacher(int nCmdID, int nDBCameraID)
 {
+  // 有可能房间对象为空...
+  if (m_lpTCPRoom == NULL)
+    return -1;
   // 在房间中查找对应的摄像头对象 => 通过摄像头数据库编号...
   GM_MapTCPCamera & theMapCamera = m_lpTCPRoom->GetMapCamera();
   GM_MapTCPCamera::iterator itorItem = theMapCamera.find(nDBCameraID);
@@ -599,6 +605,9 @@ int CTCPClient::doSendCmdLoginForTeacher(int nSceneItemID, int inDBCameraID, boo
 // 处理Teacher|Student获取房间里的在线摄像头列表...
 int CTCPClient::doCmdCommonCameraOnLineList()
 {
+  // 有可能房间对象为空...
+  if (m_lpTCPRoom == NULL)
+    return -1;  
   // 获取当前房间里的在线摄像头通道列表集合...
   GM_MapTCPCamera & theMapCamera = m_lpTCPRoom->GetMapCamera();
   GM_MapTCPCamera::iterator itorItem;
