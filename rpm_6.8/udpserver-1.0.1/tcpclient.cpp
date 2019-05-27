@@ -39,8 +39,9 @@ CTCPClient::~CTCPClient()
   if( m_lpTCPRoom != NULL && m_nClientType == kClientStudent ) {
     m_lpTCPRoom->doDeleteStudent(this);
   }
-  // 如果是讲师端，从房间当中删除之...
+  // 如果是讲师端，从房间当中删除之 => 重置房间流量统计...
   if( m_lpTCPRoom != NULL && m_nClientType == kClientTeacher ) {
+    GetApp()->GetUdpThread()->ResetRoomFlow(m_nRoomID);
     m_lpTCPRoom->doDeleteTeacher(this);
   }
   // 打印终端退出后剩余的链接数量...
@@ -333,19 +334,22 @@ int CTCPClient::doCmdStudentLogin()
   m_lpTCPRoom = m_lpTCPThread->doCreateRoom(m_nRoomID);
   m_lpTCPRoom->doCreateStudent(this);
   // 当前房间里的TCP讲师端是否在线 和 UDP讲师端是否在线...
-  bool bIsTCPTeacherOnLine = ((m_lpTCPRoom->GetTCPTeacher() != NULL) ? true : false);
+  CTCPClient * lpTCPTeacher = m_lpTCPRoom->GetTCPTeacher();
+  bool bIsTCPTeacherOnLine = ((lpTCPTeacher != NULL) ? true : false);
   bool bIsUDPTeacherOnLine = GetApp()->IsUDPTeacherPusherOnLine(m_nRoomID);
+  int  nTeacherFlowID = ((lpTCPTeacher != NULL) ? lpTCPTeacher->GetDBFlowID() : 0);
   // 发送反馈命令信息给学生端...
-  return this->doSendCmdLoginForStudent(bIsTCPTeacherOnLine, bIsUDPTeacherOnLine);
+  return this->doSendCmdLoginForStudent(bIsTCPTeacherOnLine, bIsUDPTeacherOnLine, nTeacherFlowID);
 }
 
-int CTCPClient::doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine)
+int CTCPClient::doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine, int nTeacherFlowID)
 {
   // 构造转发JSON数据块 => 返回套接字|TCP讲师|UDP讲师...
   json_object * new_obj = json_object_new_object();
   json_object_object_add(new_obj, "tcp_socket", json_object_new_int(m_nConnFD));
   json_object_object_add(new_obj, "tcp_teacher", json_object_new_int(bIsTCPOnLine));
   json_object_object_add(new_obj, "udp_teacher", json_object_new_int(bIsUDPOnLine));
+  json_object_object_add(new_obj, "flow_teacher", json_object_new_int(nTeacherFlowID));
   // 转换成json字符串，获取字符串长度...
   char * lpNewJson = (char*)json_object_to_json_string(new_obj);
   // 使用统一的通用命令发送接口函数...
@@ -362,10 +366,12 @@ void CTCPClient::doUDPTeacherPusherOnLine(bool bIsOnLineFlag)
   if( m_nClientType != kClientStudent )
     return;
   // 当前房间里的TCP讲师端是否在线 和 UDP讲师端是否在线...
-  bool bIsTCPTeacherOnLine = ((m_lpTCPRoom != NULL && m_lpTCPRoom->GetTCPTeacher() != NULL) ? true : false);
+  CTCPClient * lpTCPTeacher = m_lpTCPRoom->GetTCPTeacher();
+  bool bIsTCPTeacherOnLine = ((m_lpTCPRoom != NULL && lpTCPTeacher != NULL) ? true : false);
+  int  nTeacherFlowID = ((lpTCPTeacher != NULL) ? lpTCPTeacher->GetDBFlowID() : 0);
   bool bIsUDPTeacherOnLine = bIsOnLineFlag;
   // 向本学生端转发登录成功命令通知...
-  this->doSendCmdLoginForStudent(bIsTCPTeacherOnLine, bIsUDPTeacherOnLine);
+  this->doSendCmdLoginForStudent(bIsTCPTeacherOnLine, bIsUDPTeacherOnLine, nTeacherFlowID);
 }
 
 void CTCPClient::doUDPStudentPusherOnLine(int inDBCameraID, bool bIsOnLineFlag)

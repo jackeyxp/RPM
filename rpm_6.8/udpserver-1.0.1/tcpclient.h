@@ -44,7 +44,7 @@ private:
   int       doCmdCommonCameraOnLineList();
   int       doTransferCameraPTZByTeacher(const char * lpJsonPtr, int nJsonSize);
   int       doTransferCameraLiveCmdByTeacher(int nCmdID, int nDBCameraID);
-  int       doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine);
+  int       doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine, int nTeacherFlowID);
   int       doSendCmdLoginForTeacher(int nSceneItemID, int inDBCameraID, bool bIsCameraOnLine);
   int       doSendCommonCmd(int nCmdID, const char * lpJsonPtr = NULL, int nJsonSize = 0);
   int       doSendPHPResponse(const char * lpJsonPtr, int nJsonSize);

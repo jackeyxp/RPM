@@ -11,6 +11,7 @@ public:
   CRoom(int inRoomID);
   ~CRoom();
 public:
+  void         ResetRoomFlow() { m_nUpFlowByte = 0; m_nDownFlowByte = 0; }
   int          GetUpFlowMB() { return m_nUpFlowByte/1000/1000; }
   int          GetDownFlowMB() { return m_nDownFlowByte/1000/1000; }
   CTeacher  *  GetTeacherLooker() { return m_lpTeacherLooker; }
