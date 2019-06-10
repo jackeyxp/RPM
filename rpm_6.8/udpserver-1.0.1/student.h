@@ -40,7 +40,8 @@ private:
   bool          doCreateForLooker(char * lpBuffer, int inBufSize);
   bool          doHeaderForPusher(char * lpBuffer, int inBufSize);
   
-  bool          doTransferToTeacherLooker(char * lpBuffer, int inBufSize);
+  bool          doTransferExAudioToStudentLooker(char * lpBuffer, int inBufSize);
+  bool          doTransferToLooker(char * lpBuffer, int inBufSize);
   bool          doDetectForLooker(char * lpBuffer, int inBufSize);
 
   void          doCalcAVJamStatus();

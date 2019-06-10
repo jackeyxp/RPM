@@ -43,6 +43,7 @@ enum {
   kCmd_PHP_GetPlayerList    = 22,
   kCmd_PHP_Bind_Mini        = 23,
   kCmd_PHP_GetRoomFlow      = 24,
+  kCmd_Camera_PusherID      = 25,
 };
 
 // define the command header...

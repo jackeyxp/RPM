@@ -14,6 +14,11 @@ public:
   circlebuf  &  GetAudioCircle() { return m_audio_circle; }
   circlebuf  &  GetVideoCircle() { return m_video_circle; }
 public:
+  void          doAddStudentLooker(CStudent * lpStudent);
+  void          doDelStudentLooker(CStudent * lpStudent);
+  int           GetStudentLookerSize() { return m_MapStudentLooker.size(); }
+  GM_MapStudent & GetMapStudentLooker() { return m_MapStudentLooker; }
+public:
   uint32_t      doCalcMinSeq(bool bIsAudio);
   bool          doIsTeacherPusherLose(bool bIsAudio, uint32_t inLoseSeq);
 protected:
@@ -55,5 +60,6 @@ private:
   circlebuf     m_video_circle;       // 推流端视频环形队列...
   GM_MapLose    m_AudioMapLose;			  // 推流端检测|观看端上报的音频丢包集合队列...
   GM_MapLose    m_VideoMapLose;			  // 推流端检测|观看端上报的视频丢包集合队列...
-  CUDPThread  * m_lpUDPThread; 
+  CUDPThread  * m_lpUDPThread;        // UDP线程对象...
+  GM_MapStudent m_MapStudentLooker;   // 学生端观看者列表 => UDPPortID  => CStudent*
 };

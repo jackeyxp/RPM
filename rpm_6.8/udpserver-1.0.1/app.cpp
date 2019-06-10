@@ -221,11 +221,11 @@ bool CApp::IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID)
   return m_lpUDPThread->IsUDPStudentPusherOnLine(inRoomID, inDBCameraID);
 }
 
-void CApp::doDeleteForCameraLiveStop(int inRoomID)
+void CApp::doDeleteForCameraLiveStop(int inRoomID, int inDBCameraID)
 {
   if( m_lpUDPThread == NULL || this->IsSignalQuit() )
     return;
-  return m_lpUDPThread->doDeleteForCameraLiveStop(inRoomID);
+  return m_lpUDPThread->doDeleteForCameraLiveStop(inRoomID, inDBCameraID);
 }
 
 int CApp::doTCPRoomCommand(int nCmdID, int nRoomID)

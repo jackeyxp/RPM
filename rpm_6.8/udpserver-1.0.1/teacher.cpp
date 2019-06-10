@@ -92,7 +92,7 @@ uint32_t CTeacher::doCalcMaxConSeq(bool bIsAudio)
     return 0;
   // 没有丢包 => 已收到的最大包号 => 环形队列中最大序列号 - 1...
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   circlebuf_peek_back(&cur_circle, szPacketBuffer, nPerPackSize);
   rtp_hdr_t * lpMaxHeader = (rtp_hdr_t*)szPacketBuffer;
   return (lpMaxHeader->seq - 1);
@@ -105,7 +105,7 @@ void CTeacher::doCalcAVJamStatus()
     return;
   // 遍历环形队列，删除所有超过n秒的缓存数据包 => 不管是否是关键帧或完整包，只是为补包而存在...
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   circlebuf & cur_circle = m_video_circle;
   rtp_hdr_t * lpCurHeader = NULL;
   uint32_t    min_ts = 0, min_seq = 0;
@@ -150,7 +150,7 @@ void CTeacher::doEarseAudioByPTS(uint32_t inTimeStamp)
   if (m_audio_circle.size <= 0)
     return;
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = { 0 };
+  char szPacketBuffer[nPerPackSize] = { 0 };
   circlebuf & cur_circle = m_audio_circle;
   rtp_hdr_t * lpCurHeader = NULL;
   uint32_t    min_seq = 0, max_seq = 0;
@@ -234,7 +234,7 @@ uint32_t CTeacher::doCalcMinSeq(bool bIsAudio)
     return 0;
   // 读取第一个数据包的内容，获取最小包序号...
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = { 0 };
+  char szPacketBuffer[nPerPackSize] = { 0 };
   circlebuf_peek_front(&cur_circle, szPacketBuffer, nPerPackSize);
   rtp_hdr_t * lpCurHeader = (rtp_hdr_t*)szPacketBuffer;
   return lpCurHeader->seq;
@@ -246,8 +246,9 @@ bool CTeacher::doDetectForLooker(char * lpBuffer, int inBufSize)
   // 如果没有房间，直接返回...
   if( m_lpRoom == NULL )
     return false;
-  // 获取房间里的学生推流者对象 => 无推流者，直接返回...
-  CStudent * lpStudent = m_lpRoom->GetStudentPusher();
+  // 获取房间里指定编号的学生推流者对象 => 无推流者，直接返回...
+  int nDBCameraID = m_rtp_create.liveID;
+  CStudent * lpStudent = m_lpRoom->GetStudentPusher(nDBCameraID);
   if( lpStudent == NULL )
     return false;
   // 房间对象有效，累加房间下行流量...
@@ -304,8 +305,9 @@ bool CTeacher::doCreateForLooker(char * lpBuffer, int inBufSize)
   // 如果没有房间，直接返回...
   if( m_lpRoom == NULL )
     return false;
-  // 获取房间里的学生推流者对象 => 无推流者，直接返回...
-  CStudent * lpStudent = m_lpRoom->GetStudentPusher();
+  // 获取房间里指定编号的学生推流者对象 => 无推流者，直接返回...
+  int nDBCameraID = m_rtp_create.liveID;
+  CStudent * lpStudent = m_lpRoom->GetStudentPusher(nDBCameraID);
   if( lpStudent == NULL )
     return false;
   // 获取学生推流者的序列头信息 => 序列头为空，直接返回...
@@ -399,8 +401,9 @@ bool CTeacher::doIsStudentPusherLose(bool bIsAudio, uint32_t inLoseSeq)
   // 如果没有房间，直接返回...
   if( m_lpRoom == NULL )
     return false;
-  // 获取房间里的学生推流者对象 => 无推流者，直接返回...
-  CStudent * lpStudentPusher = m_lpRoom->GetStudentPusher();
+  // 获取房间里指定编号的学生推流者对象 => 无推流者，直接返回...
+  int nDBCameraID = m_rtp_create.liveID;
+  CStudent * lpStudentPusher = m_lpRoom->GetStudentPusher(nDBCameraID);
   if( lpStudentPusher == NULL )
     return false;
   // 在学生推流端中查看是否在对应的补包队列当中...
@@ -517,7 +520,7 @@ void CTeacher::doTagAVPackProcess(char * lpBuffer, int inBufSize)
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // 注意：每个环形队列中的数据包大小是一样的 => rtp_hdr_t + slice + Zero
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   // 如果环形队列为空 => 需要对丢包做提前预判并进行处理...
   if( cur_circle.size < nPerPackSize ) {
     // 新到序号包与最大播放包之间有空隙，说明有丢包...
@@ -682,7 +685,7 @@ int CTeacher::doSendSupplyCmd(bool bIsAudio)
   // 定义最大的补包缓冲区...
   const int nHeadSize = sizeof(rtp_supply_t);
   const int nPerPackSize = DEF_MTU_SIZE + nHeadSize;
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   uint32_t min_id = 0;
   // 获取环形队列中最小序列号...
   if( cur_circle.size > nPerPackSize ) {
@@ -788,8 +791,9 @@ void CTeacher::doSendLosePacket(bool bIsAudio)
   // 如果没有房间，直接返回...
   if( m_lpRoom == NULL )
     return;
-  // 获取房间里的学生推流者对象 => 无推流者，直接返回...
-  CStudent * lpStudent = m_lpRoom->GetStudentPusher();
+  // 获取房间里指定编号的学生推流者对象 => 无推流者，直接返回...
+  int nDBCameraID = m_rtp_create.liveID;
+  CStudent * lpStudent = m_lpRoom->GetStudentPusher(nDBCameraID);
   if( lpStudent == NULL )
     return;
   // 获取学生推流者在服务器缓存的音频或视频环形队列对象...
@@ -806,7 +810,7 @@ void CTeacher::doSendLosePacket(bool bIsAudio)
   // 所以，一定要用接口读取完整的数据包之后，再进行操作；如果用指针，一旦发生回还，就会错误...
   /////////////////////////////////////////////////////////////////////////////////////////////////
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   circlebuf_peek_front(&cur_circle, szPacketBuffer, nPerPackSize);
   lpFrontHeader = (rtp_hdr_t*)szPacketBuffer;
   // 如果要补充的数据包序号比最小序号还要小 => 没有找到，直接返回...
@@ -853,9 +857,47 @@ bool CTeacher::doTransferToStudentLooker(char * lpBuffer, int inBufSize)
   // 如果不是老师推流者，直接返回...
   if( this->GetIdTag() != ID_TAG_PUSHER )
     return false;
-  // 如果没有房间，直接返回...
-  if( m_lpRoom == NULL )
-    return false;
-  // 转发命令数据包到所有房间里的学生在线观看者...
-  return m_lpRoom->doTeacherPusherToStudentLooker(lpBuffer, inBufSize);
+  GM_MapStudent::iterator itorItem;
+  for(itorItem = m_MapStudentLooker.begin(); itorItem != m_MapStudentLooker.end(); ++itorItem) {
+    CStudent * lpStudent = itorItem->second;
+    if( lpStudent == NULL ) continue;
+    // 学生对象有效，转发数据包给这个学生观看者...
+    lpStudent->doTransferToFrom(lpBuffer, inBufSize);
+    // 房间对象有效，累加房间下行流量...
+    if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(inBufSize); }
+  }
+  return true;
+}
+
+void CTeacher::doAddStudentLooker(CStudent * lpStudent)
+{
+  assert(m_idTag == ID_TAG_PUSHER);
+  int nHostPort = lpStudent->GetHostPort();
+  m_MapStudentLooker[nHostPort] = lpStudent;
+}
+
+void CTeacher::doDelStudentLooker(CStudent * lpStudent)
+{
+  // 在学生观看端中遍历查找...
+  int nHostPort = lpStudent->GetHostPort();
+  GM_MapStudent::iterator itorItem = m_MapStudentLooker.find(nHostPort);
+  // 找到相关观看学生端对象，直接删除返回...
+  if( itorItem != m_MapStudentLooker.end() ) {
+    m_MapStudentLooker.erase(itorItem);
+    return;
+  }
+  // 如果通过端口方式没有找到，通过指针遍历查找...
+  itorItem = m_MapStudentLooker.begin();
+  while(itorItem != m_MapStudentLooker.end()) {
+    // 找到了相关节点 => 删除节点，返回...
+    if(itorItem->second == lpStudent) {
+      m_MapStudentLooker.erase(itorItem);
+      return;
+    }
+    // 2018.09.12 - by jackey => 造成过严重问题...
+    // 没有找到相关节点 => 继续找下一个...
+    ++itorItem;
+  }
+  // 通过指针遍历也没有找到，打印错误信息...
+  log_trace("Can't find UDP-Student in CRoom, HostPort: %d", nHostPort);
 }

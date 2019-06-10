@@ -366,14 +366,14 @@ bool CUDPThread::GetRoomFlow(int inRoomID, int & outUpFlowMB, int & outDownFlowM
   return true;
 }
 
-bool CUDPThread::ResetRoomFlow(int inRoomID)
+bool CUDPThread::ResetRoomExFlow(int inRoomID)
 {
   CRoom * lpRoom = NULL;
   GM_MapRoom::iterator itorRoom = m_MapRoom.find(inRoomID);
   if (itorRoom == m_MapRoom.end())
     return false;
   lpRoom = itorRoom->second;
-  lpRoom->ResetRoomFlow();
+  lpRoom->ResetRoomExFlow();
   return true;
 }
 
@@ -428,7 +428,7 @@ bool CUDPThread::IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID)
     if( itorRoom == m_MapRoom.end() )
       break;
     lpRoom = itorRoom->second; assert(lpRoom != NULL);
-    lpStudent = lpRoom->GetStudentPusher();
+    lpStudent = lpRoom->GetStudentPusher(inDBCameraID);
     // 房间里没有学生推流者...
     if( lpStudent == NULL )
       break;
@@ -460,7 +460,7 @@ bool CUDPThread::IsUDPTeacherPusherOnLine(int inRoomID)
 }
 
 // 处理由kCmd_Camera_LiveStop触发的删除事件...
-void CUDPThread::doDeleteForCameraLiveStop(int inRoomID)
+void CUDPThread::doDeleteForCameraLiveStop(int inRoomID, int inDBCameraID)
 {
   // 首先进行线程互斥...
   pthread_mutex_lock(&m_room_mutex);
@@ -472,18 +472,24 @@ void CUDPThread::doDeleteForCameraLiveStop(int inRoomID)
     GM_MapRoom::iterator itorRoom = m_MapRoom.find(inRoomID);
     if( itorRoom == m_MapRoom.end() )
       break;
-    // 获取UDP房间里的唯一老师观看者对象和唯一学生推流者对象...
     lpUdpRoom = itorRoom->second; assert(lpUdpRoom != NULL);
-    lpTeacherLooker = lpUdpRoom->GetTeacherLooker();
-    lpStudentPusher = lpUdpRoom->GetStudentPusher();
-    // 房间里的老师观看者对象有效，并且UDP删除命令还没有到达，删除之...
-    if( lpTeacherLooker != NULL && !lpTeacherLooker->GetDeleteByUDP() ) {
-      // 设置删除标志，不要通知老师端，避免死锁...
-      lpTeacherLooker->SetDeleteByTCP();
-      // 通过关联端口号，删除老师观看者对象...
-      this->doTagDelete(lpTeacherLooker->GetHostPort());
+    // 获取UDP房间里的老师观看者列表和指定的学生推流者对象...
+    GM_MapTeacher & theMapTeacher = lpUdpRoom->GetMapTeacherLooker();
+    // 遍历老师观看者列表，匹配指定的学生推流者摄像头编号...
+    for(GM_MapTeacher::iterator itorTeacher = theMapTeacher.begin(); itorTeacher != theMapTeacher.end(); ++itorTeacher) {
+      lpTeacherLooker = itorTeacher->second;
+      if(lpTeacherLooker == NULL) continue;
+      if(lpTeacherLooker->GetDBCameraID() != inDBCameraID) continue;
+      // 房间里的老师观看者对象有效，并且UDP删除命令还没有到达，删除之...
+      if( !lpTeacherLooker->GetDeleteByUDP() ) {
+        // 设置删除标志，不要通知老师端，避免死锁...
+        lpTeacherLooker->SetDeleteByTCP();
+        // 通过关联端口号，删除老师观看者对象...
+        this->doTagDelete(lpTeacherLooker->GetHostPort());
+      }
     }
     // 房间里的学生推流者对象有效，并且UDP删除命令还没有到达，删除之...
+    lpStudentPusher = lpUdpRoom->GetStudentPusher(inDBCameraID);
     if( lpStudentPusher != NULL && !lpStudentPusher->GetDeleteByUDP() ) {
       // 设置删除标志，不要通知学生端，避免死锁...
       lpStudentPusher->SetDeleteByTCP();
@@ -493,4 +499,19 @@ void CUDPThread::doDeleteForCameraLiveStop(int inRoomID)
   } while( false );  
   // 最后退出线程互斥...
   pthread_mutex_unlock(&m_room_mutex);    
+}
+
+// 更新CRoom房间里当前正在交互的学生端推流摄像头编号...
+void CUDPThread::doTeacherCameraPusherID(int inRoomID, int inDBCameraID)
+{
+  // 首先进行线程互斥...
+  pthread_mutex_lock(&m_room_mutex);
+  GM_MapRoom::iterator itorRoom = m_MapRoom.find(inRoomID);
+  // 更加房间编号查找对应的房间对象...
+  if( itorRoom != m_MapRoom.end() ) {
+    CRoom * lpUdpRoom = itorRoom->second;
+    lpUdpRoom->doCameraFocusPusherID(inDBCameraID);
+  }
+  // 最后退出线程互斥...
+  pthread_mutex_unlock(&m_room_mutex);
 }

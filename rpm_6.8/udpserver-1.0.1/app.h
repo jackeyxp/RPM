@@ -22,9 +22,9 @@ public:
   int         doCreateUdpSocket();
   int         doTCPRoomCommand(int nCmdID, int nRoomID);
   bool        doProcessCmdLine(int argc, char * argv[]);
-  void        doDeleteForCameraLiveStop(int inRoomID);
   bool        IsUDPTeacherPusherOnLine(int inRoomID);
   bool        IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID);
+  void        doDeleteForCameraLiveStop(int inRoomID, int inDBCameraID);
   void        doUDPTeacherLookerDelete(int inRoomID, int inDBCameraID);
   void        doUDPTeacherPusherOnLine(int inRoomID, bool bIsOnLineFlag);
   void        doUDPStudentPusherOnLine(int inRoomID, int inDBCameraID, bool bIsOnLineFlag);

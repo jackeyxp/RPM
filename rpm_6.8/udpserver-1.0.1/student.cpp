@@ -99,7 +99,7 @@ uint32_t CStudent::doCalcMaxConSeq(bool bIsAudio)
     return 0;
   // 没有丢包 => 已收到的最大包号 => 环形队列中最大序列号 - 1...
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   circlebuf_peek_back(&cur_circle, szPacketBuffer, nPerPackSize);
   rtp_hdr_t * lpMaxHeader = (rtp_hdr_t*)szPacketBuffer;
   return (lpMaxHeader->seq - 1);
@@ -112,7 +112,7 @@ void CStudent::doCalcAVJamStatus()
     return;
   // 遍历环形队列，删除所有超过n秒的缓存数据包 => 不管是否是关键帧或完整包，只是为补包而存在...
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   circlebuf & cur_circle = m_video_circle;
   rtp_hdr_t * lpCurHeader = NULL;
   uint32_t    min_ts = 0, min_seq = 0;
@@ -157,7 +157,7 @@ void CStudent::doEarseAudioByPTS(uint32_t inTimeStamp)
   if (m_audio_circle.size <= 0)
     return;
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = { 0 };
+  char szPacketBuffer[nPerPackSize] = { 0 };
   circlebuf & cur_circle = m_audio_circle;
   rtp_hdr_t * lpCurHeader = NULL;
   uint32_t    min_seq = 0, max_seq = 0;
@@ -241,13 +241,14 @@ uint32_t CStudent::doCalcMinSeq(bool bIsAudio)
     return 0;
   // 读取第一个数据包的内容，获取最小包序号...
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = { 0 };
+  char szPacketBuffer[nPerPackSize] = { 0 };
   circlebuf_peek_front(&cur_circle, szPacketBuffer, nPerPackSize);
   rtp_hdr_t * lpCurHeader = (rtp_hdr_t*)szPacketBuffer;
   return lpCurHeader->seq;
 }
 
 // 注意：音视频最小序号包不用管是否是有效包，只简单获取最小包号...
+// 注意：目前只存在一种观看者 => 观看讲师的学生观看者...
 bool CStudent::doDetectForLooker(char * lpBuffer, int inBufSize)
 {
   // 如果没有房间，直接返回...
@@ -257,7 +258,7 @@ bool CStudent::doDetectForLooker(char * lpBuffer, int inBufSize)
   rtp_detect_t * lpDetect = (rtp_detect_t*)lpBuffer;
   // 获取房间里的老师推流者和学生推流者...
   CTeacher * lpTeacher = m_lpRoom->GetTeacherPusher();
-  CStudent * lpStudent = m_lpRoom->GetStudentPusher();
+  CStudent * lpStudent = m_lpRoom->GetStudentPusher(m_lpRoom->GetFocusPusherID());
   // 如果学生推流者有效，填充扩展音频的最小包号...
   if( lpStudent != NULL ) {
     lpDetect->maxExAConSeq = lpStudent->doCalcMinSeq(true);
@@ -416,7 +417,7 @@ bool CStudent::doIsPusherLose(uint8_t inPType, uint32_t inLoseSeq)
     return false;
   // 获取房间里的老师推流者和学生推流者...
   CTeacher * lpTeacher = m_lpRoom->GetTeacherPusher();
-  CStudent * lpStudent = m_lpRoom->GetStudentPusher();
+  CStudent * lpStudent = m_lpRoom->GetStudentPusher(m_lpRoom->GetFocusPusherID());
   // 如果是扩展音频丢包，需要在学生推流者中查找...
   if( inPType == PT_TAG_EX_AUDIO ) {
     // 获取房间里的学生推流者对象 => 无推流者，直接返回...
@@ -491,13 +492,15 @@ bool CStudent::doTagAudio(char * lpBuffer, int inBufSize)
   if (m_lpRoom != NULL) { m_lpRoom->doAddUpFlowByte(inBufSize); }
   // 将音频数据包缓存起来...
   this->doTagAVPackProcess(lpBuffer, inBufSize);
-  // 转发音频数据包到房间里的老师观看者对象...
+  // 转发音频数据到老师观看者和第三方学生观看者...
+  return this->doTransferToLooker(lpBuffer, inBufSize);
+  /*// 转发音频数据包到房间里的老师观看者对象...
   this->doTransferToTeacherLooker(lpBuffer, inBufSize);
   // 如果房间对象无效，直接返回...
   if( m_lpRoom == NULL ) return false;
   // 转发音频数据包到房间里学生观看者列表，需要排查推流者自己形成的观看者对象...
   // 注意：转发时需要对音频数据包进行特殊的加工处理 => 音频头填充保留字段...
-  return m_lpRoom->doStudentPusherToStudentLooker(lpBuffer, inBufSize);
+  return m_lpRoom->doStudentPusherToStudentLooker(lpBuffer, inBufSize);*/
 }
 
 bool CStudent::doTagVideo(char * lpBuffer, int inBufSize)
@@ -509,8 +512,92 @@ bool CStudent::doTagVideo(char * lpBuffer, int inBufSize)
   if (m_lpRoom != NULL) { m_lpRoom->doAddUpFlowByte(inBufSize); }
   // 将视频数据包缓存起来...
   this->doTagAVPackProcess(lpBuffer, inBufSize);
+  // 转发视频数据到老师观看者...
+  return this->doTransferToLooker(lpBuffer, inBufSize);
   // 转发视频数据包到房间里的老师观看者...
-  return this->doTransferToTeacherLooker(lpBuffer, inBufSize);
+  //return this->doTransferToTeacherLooker(lpBuffer, inBufSize);
+}
+
+// 转发音视频数据到与推流者相同的摄像头编号的老师观看端...
+bool CStudent::doTransferToLooker(char * lpBuffer, int inBufSize)
+{
+  // 如果房间对象无效，直接返回...
+  if( m_lpRoom == NULL )
+    return false;
+  // 获取当前学生推流者的摄像头编号...
+  GM_MapTeacher::iterator itorItem;
+  int nDBCameraID = this->GetDBCameraID();
+  GM_MapTeacher & theMapTeacher = m_lpRoom->GetMapTeacherLooker();
+  for(itorItem = theMapTeacher.begin(); itorItem != theMapTeacher.end(); ++itorItem) {
+    CTeacher * lpTeacher = itorItem->second;
+    // 如果讲师观看者无效，或没有观看当前学生推流者，继续下一个...
+    if(lpTeacher == NULL || lpTeacher->GetDBCameraID() != nDBCameraID)
+      continue;
+    // 当前讲师观看者正在观看当前学生推流者的数据...
+    lpTeacher->doTransferToFrom(lpBuffer, inBufSize);
+    // 将数据转发给了讲师端，需要累加房间下行流量...
+    m_lpRoom->doAddDownFlowByte(inBufSize);
+  }
+  // 把音频数据当成扩展音频数据包转发给第三方学生观看者对象...
+  return this->doTransferExAudioToStudentLooker(lpBuffer, inBufSize);
+}
+
+// 转发扩展音频到挂载到讲师推流者的学生端列表下面，要排除学生推流者自己...
+// 注意：转发时需要对音频数据包进行特殊的加工处理 => 音频头填充保留字段...
+bool CStudent::doTransferExAudioToStudentLooker(char * lpBuffer, int inBufSize)
+{
+  // 必须是有效的音频推流数据...
+  if( lpBuffer == NULL || inBufSize <= 0 )
+    return false;
+  // 将音频序列头信息追加到转发数据包头的保留字段当中...
+  rtp_hdr_t * lpHdrHeader = (rtp_hdr_t*)lpBuffer;
+  // 如果不是音频数据包，直接返回...
+  if( lpHdrHeader->pt != PT_TAG_AUDIO )
+    return false;
+  // 获取当前学生推流者的摄像头编号...
+  int nDBCameraID = this->GetDBCameraID();
+  // 如果当前学生推流编号与讲师端推流焦点编号不一致，直接返回...
+  if( this->GetDBCameraID() != m_lpRoom->GetFocusPusherID() )
+    return false;
+  // 获取房间里有效的老师推流者，无效，直接返回...
+  CTeacher * lpTeacherPusher = m_lpRoom->GetTeacherPusher();
+  if( lpTeacherPusher == NULL )
+    return false;
+  // 获取老师推流者已经挂载的学生观看者列表 => 有可能包含当前学生推流者...
+  GM_MapStudent & theMapStudent = lpTeacherPusher->GetMapStudentLooker();
+  // 如果没有在线的观看学生端，直接返回...
+  if( theMapStudent.size() <= 0 )
+    return false;
+  // 获取当前学生推流者的序列头信息 => 序列头为空，直接返回...
+  string & strSeqHeader = this->GetSeqHeader();
+  if( strSeqHeader.size() <= 0 )
+    return false;
+  // 获取学生推流者自身的tcpSock标识符号...
+  int nPushSockID = this->GetTCPSockID();
+  // 获取扩展音频变化次数(自动溢出回还)，保存到高两字节...
+  lpHdrHeader->noset = ((uint32_t)(m_lpRoom->GetExAudioChangeNum()) << 16);
+  // 获取序列头里面音频标识信息内容 => 获取第三个字节，填充到最低字节位...
+  lpHdrHeader->noset |= (uint8_t)strSeqHeader.at(2);
+  // 开始遍历学生观看者对象列表，转发学生推流者数据包...
+  GM_MapStudent::iterator itorItem;
+  for(itorItem = theMapStudent.begin(); itorItem != theMapStudent.end(); ++itorItem) {
+    CStudent * lpStudent = itorItem->second;
+    if (lpStudent == NULL) continue;
+    // 获取学生观看者对应的tcp相关信息...
+    int nTCPSockID = lpStudent->GetTCPSockID();
+    ROLE_TYPE nRoleType = lpStudent->GetTCPRoleType();
+    // 如果推流者tcpSock与观看者tcpSock一致，并且不是组播发送者角色，不要转发给这个观看者...
+    if ((nTCPSockID == nPushSockID) && (nRoleType != kRoleMultiSend))
+      continue;
+    // 注意：终端是组播发送者，推流者和观看者tcpSock相同也要转发 => 为了保持组播数据一致...
+    // 将学生推流者数据包转发给tcpSock不一致的学生观看者对象...
+    lpStudent->doTransferToFrom(lpBuffer, inBufSize);
+    // 将数据转发给了学生端，需要累加房间下行流量...
+    m_lpRoom->doAddDownFlowByte(inBufSize);
+    // 打印扩展音频转发详细信息 => 只是为了调试使用...
+    //log_debug("HostAddr: %u, HostPort: %d, ExAudio: %d", lpStudent->GetHostAddr(), lpStudent->GetHostPort(), lpHdrHeader->seq);
+  }
+  return true;
 }
 
 void CStudent::doTagAVPackProcess(char * lpBuffer, int inBufSize)
@@ -547,7 +634,7 @@ void CStudent::doTagAVPackProcess(char * lpBuffer, int inBufSize)
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // 注意：每个环形队列中的数据包大小是一样的 => rtp_hdr_t + slice + Zero
   //////////////////////////////////////////////////////////////////////////////////////////////////
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   // 如果环形队列为空 => 需要对丢包做提前预判并进行处理...
   if( cur_circle.size < nPerPackSize ) {
     // 新到序号包与最大播放包之间有空隙，说明有丢包...
@@ -713,7 +800,7 @@ int CStudent::doSendSupplyCmd(bool bIsAudio)
   // 定义最大的补包缓冲区...
   const int nHeadSize = sizeof(rtp_supply_t);
   const int nPerPackSize = DEF_MTU_SIZE + nHeadSize;
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   uint32_t min_id = 0;
   // 获取环形队列中最小序列号...
   if( cur_circle.size > nPerPackSize ) {
@@ -824,7 +911,7 @@ void CStudent::doSendLosePacket(uint8_t inPType)
     return;
   // 获取房间里的老师推流者对象和学生推流者对象...
   CTeacher * lpTeacher = m_lpRoom->GetTeacherPusher();
-  CStudent * lpStudent = m_lpRoom->GetStudentPusher();
+  CStudent * lpStudent = m_lpRoom->GetStudentPusher(m_lpRoom->GetFocusPusherID());
   // 如果是扩展音频，学生推流者无效，直接返回...
   if((inPType == PT_TAG_EX_AUDIO) && (lpStudent == NULL))
     return;
@@ -846,7 +933,7 @@ void CStudent::doSendLosePacket(uint8_t inPType)
   // 所以，一定要用接口读取完整的数据包之后，再进行操作；如果用指针，一旦发生回还，就会错误...
   /////////////////////////////////////////////////////////////////////////////////////////////////
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
-  static char szPacketBuffer[nPerPackSize] = {0};
+  char szPacketBuffer[nPerPackSize] = {0};
   circlebuf_peek_front(&cur_circle, szPacketBuffer, nPerPackSize);
   lpFrontHeader = (rtp_hdr_t*)szPacketBuffer;
   // 如果要补充的数据包序号比最小序号还要小 => 没有找到，直接返回...
@@ -888,7 +975,7 @@ void CStudent::doSendLosePacket(uint8_t inPType)
 }
 
 // 学生推流者数据包，转发给房间里的老师观看者对象...
-bool CStudent::doTransferToTeacherLooker(char * lpBuffer, int inBufSize)
+/*bool CStudent::doTransferToTeacherLooker(char * lpBuffer, int inBufSize)
 {
   // 如果没有房间，直接返回...
   if( m_lpRoom == NULL )
@@ -901,4 +988,4 @@ bool CStudent::doTransferToTeacherLooker(char * lpBuffer, int inBufSize)
   if (m_lpRoom != NULL) { m_lpRoom->doAddDownFlowByte(inBufSize); }
   // 将数据命令包转发给房间里的老师观看者对象...
   return lpTeacher->doTransferToFrom(lpBuffer, inBufSize);
-}
+}*/

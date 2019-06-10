@@ -39,13 +39,14 @@ private:
   int       doCmdStudentOnLine();
   int       doCmdTeacherLogin();
   int       doCmdTeacherOnLine();
+  int       doCmdTeacherCameraPusherID();
   int       doCmdTeacherCameraLiveStop();
   int       doCmdTeacherCameraLiveStart();
   int       doCmdCommonCameraOnLineList();
   int       doTransferCameraPTZByTeacher(const char * lpJsonPtr, int nJsonSize);
   int       doTransferCameraLiveCmdByTeacher(int nCmdID, int nDBCameraID);
+  int       doSendCmdLoginForTeacher(int inDBCameraID, bool bIsCameraOnLine);
   int       doSendCmdLoginForStudent(bool bIsTCPOnLine, bool bIsUDPOnLine, int nTeacherFlowID);
-  int       doSendCmdLoginForTeacher(int nSceneItemID, int inDBCameraID, bool bIsCameraOnLine);
   int       doSendCommonCmd(int nCmdID, const char * lpJsonPtr = NULL, int nJsonSize = 0);
   int       doSendPHPResponse(const char * lpJsonPtr, int nJsonSize);
 private:
@@ -55,7 +56,6 @@ private:
   int          m_nDBFlowID;        // 记录流量编号...
   int          m_nHostPort;        // 连接端口...
   int          m_nClientType;      // 客户端类型...
-  int          m_nSceneItemID;     // 讲师端当前请求的场景资源编号...
   time_t       m_nStartTime;       // 超时检测起点...
   string       m_strSinAddr;       // 连接映射地址...
   string       m_strMacAddr;       // 记录登录MAC地址...

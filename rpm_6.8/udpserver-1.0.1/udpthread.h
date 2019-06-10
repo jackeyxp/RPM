@@ -18,12 +18,13 @@ public:
   void        doDelLoseForLooker(CNetwork * lpLooker);
   void        doAddSupplyForPusher(CNetwork * lpPusher);
   void        doDelSupplyForPusher(CNetwork * lpPusher);
-  void        doDeleteForCameraLiveStop(int inRoomID);
   bool        IsUDPTeacherPusherOnLine(int inRoomID);
   bool        IsUDPStudentPusherOnLine(int inRoomID, int inDBCameraID);
+  void        doDeleteForCameraLiveStop(int inRoomID, int inDBCameraID);
+  void        doTeacherCameraPusherID(int inRoomID, int inDBCameraID);
   bool        onRecvEvent(uint32_t inHostAddr, uint16_t inHostPort, char * lpBuffer, int inBufSize);
   bool        GetRoomFlow(int inRoomID, int & outUpFlowMB, int & outDownFlowMB);
-  bool        ResetRoomFlow(int inRoomID);
+  bool        ResetRoomExFlow(int inRoomID);
 private:
   bool        doProcSocket(uint32_t nHostSinAddr, uint16_t nHostSinPort, char * lpBuffer, int inBufSize);
   void        doTagDelete(int nHostPort);

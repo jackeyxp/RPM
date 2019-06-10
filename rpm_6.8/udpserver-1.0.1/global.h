@@ -57,7 +57,8 @@ typedef list<CNetwork *>        GM_ListPusher;  // ÓĞ²¹°üµÄÍÆÁ÷ÕßÁĞ±í => Ñ§ÉúÍÆÁ
 typedef list<CNetwork *>        GM_ListLooker;  // ÓĞ¶ª°üµÄ¹Û¿´ÕßÁĞ±í => Ñ§Éú¹Û¿´Õß|ÀÏÊ¦¹Û¿´Õß...
 typedef map<int, CRoom *>       GM_MapRoom;     // RoomID => CRoom *
 typedef map<int, CNetwork *>    GM_MapNetwork;  // PortID => CNetwork * => CStudent | CTeacher
-typedef map<int, CStudent *>    GM_MapStudent;  // PortID => CStudent * => Ñ§Éú¶Ë¹Û¿´ÕßÁĞ±í
+typedef map<int, CStudent *>    GM_MapStudent;  // PortID => CStudent * => Ñ§Éú¹Û¿´ÕßÁĞ±í
+typedef map<int, CTeacher *>    GM_MapTeacher;  // PortID => CTeacher * => ½²Ê¦¹Û¿´ÕßÁĞ±í
 typedef map<uint32_t, rtp_lose_t>  GM_MapLose;  // ¶¨Òå¼ì²âµ½µÄ¶ª°ü¶ÓÁĞ => ĞòÁĞºÅ : ¶ª°ü½á¹¹Ìå...
 
 // ¶¨ÒåÈÕÖ¾´¦Àíº¯ÊıºÍºê => debug Ä£Ê½Ö»´òÓ¡²»Ğ´ÈÕÖ¾ÎÄ¼ş...
