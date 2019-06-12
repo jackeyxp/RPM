@@ -580,7 +580,9 @@ int CTCPClient::doCmdTeacherLogin()
   // 创建或更新房间，更新房间里的讲师端...
   m_lpTCPRoom = m_lpTCPThread->doCreateRoom(m_nRoomID);
   m_lpTCPRoom->doCreateTeacher(this);
-  return true;
+  // 发送反馈命令信息给讲师端 => 设置默认通道和状态...
+  return this->doSendCmdLoginForTeacher(0, false);
+
   /*// 当前讲师端启动时正要播放的场景资源编号和摄像头通道编号...
   m_nSceneItemID = atoi(m_MapJson["sitem_id"].c_str());
   int nDBCameraID = atoi(m_MapJson["camera_id"].c_str());
