@@ -1,8 +1,10 @@
 
 #include "app.h"
-#include "tcpcenter.h"
-#include <json/json.h>
 #include <netdb.h>
+#include <json/json.h>
+#include "tcpcenter.h"
+#include "tcpthread.h"
+#include "tcproom.h"
 
 #define ONLINE_TIME_OUT          30   // 向中心服务器汇报频率30秒...
 #define MAX_LINE_SIZE      4 * 1024   // 读取最大数据长度...
@@ -122,7 +124,7 @@ int CTCPCenter::doHandleTimeout()
   }
   // 如果发生汇报超时，向中心汇报，并重置超时...
   if( this->IsTimeout() ) {
-    this->doSendCommonCmd(kCmd_UdpServer_OnLine);
+    this->doCmdUdpServerOnLine();
     this->ResetTimeout();
   }
   // 返回正常...
@@ -252,6 +254,62 @@ int CTCPCenter::doSendCommonCmd(int nCmdID, const char * lpJsonPtr/* = NULL*/, i
   }
   // 返回执行正确...
   return 0;
+}
+
+// 采用集中汇报房间列表，而不是单独发送...
+int CTCPCenter::doCmdUdpServerOnLine()
+{
+  string strRoomList;
+  GM_MapTCPRoom & theMapRoom = m_lpTCPThread->GetMapTCPRoom();
+  GM_MapTCPRoom::iterator itorRoom = theMapRoom.begin();
+  while( itorRoom != theMapRoom.end() ) {
+    char szValue[255] = {0};
+    int  nRoomID = itorRoom->first;
+    CTCPRoom * lpTCPRoom = itorRoom->second;
+    int nTeacherCount = lpTCPRoom->GetTeacherCount();
+    int nStudentCount = lpTCPRoom->GetStudentCount();
+    // 构造每个房间的信息 => 房间号-老师数量-学生数量...
+    sprintf(szValue, "%d-%d-%d", nRoomID, nTeacherCount, nStudentCount);
+    // 追加特殊换行符号 => |
+    if (++itorRoom != theMapRoom.end()) {
+      strcat(szValue, "|");
+    }
+    // 将数据更新到字符串缓存当中...
+    strRoomList.append(szValue, strlen(szValue));
+  }
+  // 仅供测试使用...
+  /*int g_tCount = 0;
+  if (g_tCount == 0 ) {
+    strRoomList.append("200001-1-1|200002-0-2|200003-1-0|200005-1-4");
+    ++g_tCount;
+  } else if( g_tCount == 1) {
+    strRoomList.append("200002-0-2|200005-1-4");
+    ++g_tCount;
+  } else if( g_tCount == 2) {
+    strRoomList.append("200001-1-1|200002-0-2|200003-1-0");
+    ++g_tCount;
+  }*/
+  // 封装成json数据包...
+  int    nJsonSize = 0;
+  char * lpNewJson = NULL;
+  json_object * new_obj = NULL;
+  if (strRoomList.size() > 0) {
+    // 将数据转换成json数据包...
+    new_obj = json_object_new_object();
+    json_object_object_add(new_obj, "room_list", json_object_new_string(strRoomList.c_str()));
+    // 转换成json字符串，获取字符串长度...
+    lpNewJson = (char*)json_object_to_json_string(new_obj);
+    nJsonSize = strlen(lpNewJson);
+  }
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendCommonCmd(kCmd_UdpServer_OnLine, lpNewJson, nJsonSize);
+  // json对象引用计数减少...
+  if (new_obj != NULL ) {
+    json_object_put(new_obj);
+    new_obj = NULL;
+  }
+  // 返回执行结果...
+  return nResult;
 }
 
 // 针对TCP房间里讲师端、学生端计数器变化的命令通知...

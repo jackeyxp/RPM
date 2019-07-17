@@ -14,6 +14,7 @@ public:
   virtual void Entry();
 public:
   int         GetEpollFD() { return m_epoll_fd; }
+  GM_MapTCPRoom & GetMapTCPRoom() { return m_MapTCPRoom; }
   GM_MapTCPConn & GetMapConnect() { return m_MapConnect; }
 public:
   bool        InitThread();                     // 初始化并启动线程...

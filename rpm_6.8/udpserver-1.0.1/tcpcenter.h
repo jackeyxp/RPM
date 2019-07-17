@@ -16,6 +16,7 @@ public:
   int          doHandleTimeout();
   int          doRoomCommand(int nCmdID, int nRoomID);
 private:
+  int          doCmdUdpServerOnLine();
   int          doSendCommonCmd(int nCmdID, const char * lpJsonPtr = NULL, int nJsonSize = 0);
   int          doCreateTCPSocket(const char * lpInAddr, int nHostPort);
   int          SetNonBlocking(int sockfd);

@@ -15,6 +15,8 @@ public:
   CTCPCamera * doCreateCamera(int nDBCameraID, int nTCPSockFD, string & strCameraName, string & strPCName);
   CTCPClient * GetTCPTeacher() { return m_lpTCPTeacher; }
   GM_MapTCPCamera & GetMapCamera() { return m_MapTCPCamera; }
+  int          GetTeacherCount() { return m_lpTCPTeacher ? 1 : 0; }
+  int          GetStudentCount() { return m_MapTCPStudent.size(); }
 public:
   void         doCreateStudent(CTCPClient * lpStudent);
   void         doDeleteStudent(CTCPClient * lpStudent);

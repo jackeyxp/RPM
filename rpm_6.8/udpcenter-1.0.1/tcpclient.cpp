@@ -96,6 +96,8 @@ int CTCPClient::ForRead()
     // 数据区有效，保存用户类型...
     m_nClientType = lpCmdHeader->m_type;
     assert( nDataSize >= lpCmdHeader->m_pkg_len );
+    // 需要提前清空上次解析的结果...
+    m_MapJson.clear();
     // 判断是否需要解析JSON数据包，解析错误，直接删除链接...
     int nResult = -1;
     if( lpCmdHeader->m_pkg_len > 0 ) {
@@ -543,9 +545,110 @@ int CTCPClient::doCmdUdpServerLogin()
   return 0;
 }
 
+static int8_t sDigitMask[] =
+{
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //0-9
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //10-19 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //20-29
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //30-39
+	0, 0, 0, 0, 0, 0, 0, 0, 1, 1, //40-49 //stop on every character except a number
+	1, 1, 1, 1, 1, 1, 1, 1, 0, 0, //50-59
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //60-69 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //70-79
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //80-89
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //90-99
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //100-109
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //110-119
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //120-129
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //130-139
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //140-149
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //150-159
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //160-169
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //170-179
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //180-189
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //190-199
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //200-209
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //210-219
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //220-229
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //230-239
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //240-249
+	0, 0, 0, 0, 0, 0              //250-255
+};
+
+int CTCPClient::doParseInt(char * inList, int & outSize)
+{
+  int nNumVal = 0; outSize = 0;
+	uint8_t * fStartGet = (uint8_t*)inList;
+	uint8_t * fEndGet = fStartGet + strlen(inList);
+	// 遍历字符串，直到遇到数字就停止遍历...
+	while ((fStartGet < fEndGet) && (!sDigitMask[*fStartGet])) {
+		fStartGet++;
+	}
+	// 如果开始大于或等于结束，说明没有找到数字，返回...
+	if (fStartGet >= fEndGet)
+    return -1;
+	// 从当前位置开始，解析出数字内容...
+	while ((fStartGet < fEndGet) && (*fStartGet >= '0') && (*fStartGet <= '9')) {
+		nNumVal = (nNumVal * 10) + (*fStartGet - '0');
+		fStartGet++;
+	}
+  // 返回有效数值和字符串长度...
+  outSize = fStartGet - (uint8_t*)inList;
+  return nNumVal;
+}
+
+void CTCPClient::doParseRoom(char * inList)
+{
+  int nOutSize = 0;
+  int nRoomID = doParseInt(inList, nOutSize);
+  inList += nOutSize;
+  int nTeacherCount = doParseInt(inList, nOutSize);
+  inList += nOutSize;
+  int nStudentCount = doParseInt(inList, nOutSize);
+  inList += nOutSize;
+  if (nRoomID < 0 || nTeacherCount < 0 || nStudentCount < 0)
+    return;
+  // 如果讲师数|学生数都是零，直接删除对应房间号...
+  if (nTeacherCount <= 0 && nStudentCount <= 0) {
+    GetApp()->doDeleteRoom(nRoomID);
+    return;
+  }
+  // 创建或更新房间对象，创建成功，更新信息...
+  CUdpServer * lpUdpServer = GetApp()->doFindUdpServer(m_nConnFD);
+  CTCPRoom * lpRoom = GetApp()->doCreateRoom(nRoomID, lpUdpServer);
+  if( lpRoom != NULL ) {
+    lpRoom->m_nTeacherCount = nTeacherCount;
+    lpRoom->m_nStudentCount = nStudentCount;
+  }
+  // 将房间号码添加到临时房间列表当中...
+  lpUdpServer->m_MapInt[nRoomID] = nRoomID;
+}
+
 // 处理UdpServer的在线汇报事件...
 int CTCPClient::doCmdUdpServerOnLine()
 {
+  // 通过套接字编号查找服务器对象，没有找到，直接返回...
+  CUdpServer * lpUdpServer = GetApp()->doFindUdpServer(m_nConnFD);
+  // 如果没有包含room_list字段 => 清除当前服务器下所有的房间...
+  if( m_MapJson.find("room_list") == m_MapJson.end() ) {
+    GetApp()->doDeleteRoom(lpUdpServer);
+    return -1;
+  }
+  // 付过没有找到服务器，返回...
+  if( lpUdpServer == NULL )
+    return -1;
+  // 先清理临时房间列表...
+  lpUdpServer->m_MapInt.clear();
+  // 获取房间列表字符串内容...
+  string strRoomList = m_MapJson["room_list"];
+  char * lpList = (char*)strRoomList.c_str();
+  char * ptrLine = strtok(lpList, "|");
+  while (ptrLine != NULL) {
+    this->doParseRoom(ptrLine);
+    ptrLine = strtok(NULL, "|");
+  }
+  // 调用服务器接口，删除已经死亡的房间对象...
+  lpUdpServer->doEarseDeadRoom();
   return 0;
 }
 
@@ -680,8 +783,6 @@ int CTCPClient::parseJsonData(const char * lpJsonPtr, int nJsonLength)
   // 首先判断输入数据的有效性...
   if( lpJsonPtr == NULL || nJsonLength <= 0 )
     return -1;
-  // 清空上次解析的结果...
-  m_MapJson.clear();
   // 解析 JSON 数据包失败，直接返回错误号...
   json_object * new_obj = json_tokener_parse(lpJsonPtr);
   if( new_obj == NULL ) {

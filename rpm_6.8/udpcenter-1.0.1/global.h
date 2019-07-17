@@ -56,6 +56,7 @@ typedef struct os_sem_data os_sem_t;
 class CApp;
 class CTCPRoom;
 class CUdpServer;
+typedef map<int, int>             GM_MapInt;
 typedef map<int, CTCPRoom *>      GM_MapRoom;       // RoomID => CTCPRoom *
 typedef map<int, CUdpServer *>    GM_MapServer;     // socket => CUdpServer *
 

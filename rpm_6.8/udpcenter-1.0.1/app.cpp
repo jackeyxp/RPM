@@ -223,6 +223,27 @@ CUdpServer::~CUdpServer()
   GetApp()->doDeleteRoom(this);
 }
 
+// 删除已经死亡的房间对象...
+void CUdpServer::doEarseDeadRoom()
+{
+  list<int> theDeadList;
+  GM_MapRoom::iterator itorRoom = m_MapRoom.begin();
+  while( itorRoom != m_MapRoom.end() ) {
+    int nRoomID = itorRoom->first;
+    // 如果没有在最新列表中找到记录，标记为死亡...
+    if (m_MapInt.find(nRoomID) == m_MapInt.end()) {
+      theDeadList.push_back(nRoomID);
+    }
+    // 继续遍历...
+    ++itorRoom;
+  }
+  // 再利用死亡名单，执行真正的删除操作...
+  list<int>::iterator itorList;
+  for(itorList = theDeadList.begin(); itorList != theDeadList.end(); ++itorList) {
+    GetApp()->doDeleteRoom(*itorList);
+  }
+}
+
 // 挂载房间到当前直播服务器上...
 void CUdpServer::doMountRoom(CTCPRoom * lpRoom)
 {

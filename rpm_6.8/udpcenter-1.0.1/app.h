@@ -52,7 +52,9 @@ public:
   void         doDelTeacher(int nRoomID);
   void         doAddStudent(int nRoomID);
   void         doDelStudent(int nRoomID);
+  void         doEarseDeadRoom();
 private:
+  GM_MapInt    m_MapInt;          // 临时更新房间列表...
   GM_MapRoom   m_MapRoom;         // 已挂载房间对象集合列表...
   string       m_strRemoteAddr;   // 服务器远程地址
   string       m_strUdpAddr;      // 服务器UDP地址
@@ -80,4 +82,5 @@ private:
   CUdpServer * m_lpUdpServer;
 
   friend class CUdpServer;
+  friend class CTCPClient;
 };
