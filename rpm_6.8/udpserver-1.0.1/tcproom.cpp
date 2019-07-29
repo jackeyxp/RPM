@@ -8,6 +8,7 @@
 CTCPRoom::CTCPRoom(int inRoomID)
   : m_lpTCPTeacher(NULL)
   , m_nRoomID(inRoomID)
+  , m_nMaxScreenID(0)
 {
   assert(m_nRoomID > 0);
 }
@@ -115,6 +116,43 @@ void CTCPRoom::doDeleteStudent(CTCPClient * lpStudent)
   }
   // 通过指针遍历也没有找到，打印错误信息...
   log_trace("Can't find TCP-Student in CTCPRoom, ConnFD: %d", nConnFD);
+}
+
+void CTCPRoom::doCreateScreen(CTCPClient * lpScreen)
+{
+  int nConnFD = lpScreen->GetConnFD();
+  int nClientType = lpScreen->GetClientType();
+  // 如果终端类型不是屏幕端，直接返回...
+  if( nClientType != kClientScreen )
+    return;
+  // 将学生观看到更新到观看列表...
+  m_MapTCPScreen[nConnFD] = lpScreen;  
+  lpScreen->SetScreenID(++m_nMaxScreenID);
+}
+
+void CTCPRoom::doDeleteScreen(CTCPClient * lpScreen)
+{
+  // 找到相关屏幕端对象，直接删除返回...
+  int nConnFD = lpScreen->GetConnFD();
+  GM_MapTCPConn::iterator itorItem = m_MapTCPScreen.find(nConnFD);
+  if( itorItem != m_MapTCPScreen.end() ) {
+    m_MapTCPScreen.erase(itorItem);
+    return;
+  }
+  // 如果通过FD方式没有找到，通过指针遍历查找...
+  itorItem = m_MapTCPScreen.begin();
+  while(itorItem != m_MapTCPScreen.end()) {
+    // 找到了相关节点 => 删除节点，返回...
+    if(itorItem->second == lpScreen) {
+      m_MapTCPScreen.erase(itorItem);
+      return;
+    }
+    // 2018.09.12 - by jackey => 造成过严重问题...
+    // 如果没有找到相关节点 => 继续下一个...
+    ++itorItem;
+  }
+  // 通过指针遍历也没有找到，打印错误信息...
+  log_trace("Can't find TCP-Screen in CTCPRoom, ConnFD: %d", nConnFD);  
 }
 
 // 一个房间只有一个老师端...

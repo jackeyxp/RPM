@@ -363,6 +363,7 @@ const char * get_client_type(int inType)
     case kClientStudent:   return "Student";
     case kClientTeacher:   return "Teacher";
     case kClientUdpServer: return "UdpServer";
+    case kClientScreen:    return "Screen";
   }
   return "unknown";
 }
@@ -397,6 +398,10 @@ const char * get_command_name(int inCmd)
     case kCmd_PHP_Bind_Mini:        return "PHP_Bind_Mini";
     case kCmd_PHP_GetRoomFlow:      return "PHP_GetRoomFlow";
     case kCmd_Camera_PusherID:      return "Camera_PusherID";
+    case kCmd_Screen_Login:         return "Screen_Login";
+    case kCmd_Screen_OnLine:        return "Screen_OnLine";
+    case kCmd_Screen_Packet:        return "Screen_Packet";
+    case kCmd_Screen_Finish:        return "Screen_Finish";
   }
   return "unknown";
 }

@@ -14,6 +14,7 @@
 CTCPClient::CTCPClient(CTCPThread * lpTCPThread, int connfd, int nHostPort, string & strSinAddr)
   : m_nRoomID(0)
   , m_nDBFlowID(0)
+  , m_nScreenID(0)
   , m_nClientType(0)
   , m_nConnFD(connfd)
   , m_lpTCPRoom(NULL)
@@ -34,6 +35,10 @@ CTCPClient::~CTCPClient()
   // 打印终端退出信息...
   log_trace("TCPClient Delete: %s, From: %s:%d, Socket: %d", get_client_type(m_nClientType), 
             this->m_strSinAddr.c_str(), this->m_nHostPort, this->m_nConnFD);
+  // 如果是屏幕端，从房间当中删除之...
+  if( m_lpTCPRoom != NULL && m_nClientType == kClientScreen ) {
+    m_lpTCPRoom->doDeleteScreen(this);
+  }
   // 如果是学生端，从房间当中删除之...
   if( m_lpTCPRoom != NULL && m_nClientType == kClientStudent ) {
     m_lpTCPRoom->doDeleteStudent(this);
@@ -125,7 +130,7 @@ int CTCPClient::ForRead()
     m_MapJson.clear();
     // 判断是否需要解析JSON数据包，解析错误，直接删除链接...
     int nResult = -1;
-    if( lpCmdHeader->m_pkg_len > 0 ) {
+    if( lpCmdHeader->m_pkg_len > 0 && lpCmdHeader->m_cmd != kCmd_Screen_Packet) {
       nResult = this->parseJsonData(lpDataPtr, lpCmdHeader->m_pkg_len);
       if( nResult < 0 )
         return nResult;
@@ -142,6 +147,7 @@ int CTCPClient::ForRead()
       case kClientPHP:      nResult = this->doPHPClient(lpCmdHeader, lpDataPtr); break;
       case kClientStudent:  nResult = this->doStudentClient(lpCmdHeader, lpDataPtr); break;
       case kClientTeacher:  nResult = this->doTeacherClient(lpCmdHeader, lpDataPtr); break;
+      case kClientScreen:   nResult = this->doScreenClient(lpCmdHeader, lpDataPtr); break;
     }
 		// 删除已经处理完毕的数据 => Header + pkg_len...
 		m_strRecv.erase(0, lpCmdHeader->m_pkg_len + sizeof(Cmd_Header));
@@ -437,6 +443,107 @@ int CTCPClient::doCmdStudentOnLine()
 }
 
 // 处理Teacher事件...
+int CTCPClient::doScreenClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
+{
+  int nResult = -1;
+  switch(lpHeader->m_cmd)
+  {
+    case kCmd_Screen_Login:      nResult = this->doCmdScreenLogin(); break;
+    case kCmd_Screen_OnLine:     nResult = this->doCmdScreenOnLine(); break;
+    case kCmd_Screen_Finish:     nResult = this->doCmdScreenFinish(); break;
+    case kCmd_Screen_Packet:     nResult = this->doCmdScreenPacket(lpJsonPtr, lpHeader->m_pkg_len); break;
+  }
+  // 默认全部返回正确...
+  return 0;
+}
+
+int CTCPClient::doCmdScreenPacket(const char * lpDataPtr, int nDataSize)
+{
+  // 如果不是屏幕端，直接返回...
+  if( m_nClientType != kClientScreen )
+    return 0;
+  // 如果数据包无效，直接返回...
+  if (lpDataPtr == NULL || nDataSize <= 0)
+    return 0;
+  // 结束包由专门的命令发送...
+  int nResult = this->doTransferScreenPackToTeacher(lpDataPtr, nDataSize);
+  // 如果转发给讲师端失败，需要返回0表示不要再继续转发了...
+  int nPackSize = ((nResult < 0) ? 0 : nDataSize);
+  // 构造转发JSON数据块 => 返回套TCP套接字编号...
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "pack_size", json_object_new_int(nPackSize));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  nResult = this->doSendCommonCmd(kCmd_Screen_Packet, lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+int CTCPClient::doTransferScreenPackToTeacher(const char * lpDataPtr, int nDataSize)
+{
+  // 如果讲师端无效，需要停止转发屏幕端数据包...
+  CTCPClient * lpTCPTeacher = m_lpTCPRoom->GetTCPTeacher();
+  if (lpTCPTeacher == NULL)
+    return -1;
+  // 使用统一的通用命令发送接口函数 => 注意：必须是对应的讲师端的对象...
+  return lpTCPTeacher->doSendCommonCmd(kCmd_Screen_Packet, lpDataPtr, nDataSize, m_nScreenID);
+}
+
+int CTCPClient::doCmdScreenFinish()
+{
+  // 如果讲师端无效，需要停止转发屏幕端数据包...
+  CTCPClient * lpTCPTeacher = m_lpTCPRoom->GetTCPTeacher();
+  if (lpTCPTeacher == NULL)
+    return -1;
+  // 构造转发JSON数据块 => 转发结束命令到讲师端...
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "screen_id", json_object_new_int(m_nScreenID));
+  json_object_object_add(new_obj, "user_name", json_object_new_string(m_strUserName.c_str()));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = lpTCPTeacher->doSendCommonCmd(kCmd_Screen_Finish, lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+int CTCPClient::doCmdScreenLogin()
+{
+  if( m_MapJson.find("room_id") == m_MapJson.end() ||
+    m_MapJson.find("user_name") == m_MapJson.end() ) {
+    return -1;
+  }
+  // 保存解析到的有效JSON数据项...
+  m_strRoomID = m_MapJson["room_id"];
+  m_strUserName = m_MapJson["user_name"];
+  m_nRoomID = atoi(m_strRoomID.c_str());
+  // 创建或更新房间，更新房间里的屏幕端...
+  m_lpTCPRoom = m_lpTCPThread->doCreateRoom(m_nRoomID);
+  m_lpTCPRoom->doCreateScreen(this);
+  // 构造转发JSON数据块 => 返回套TCP套接字编号...
+  json_object * new_obj = json_object_new_object();
+  json_object_object_add(new_obj, "tcp_socket", json_object_new_int(m_nConnFD));
+  // 转换成json字符串，获取字符串长度...
+  char * lpNewJson = (char*)json_object_to_json_string(new_obj);
+  // 使用统一的通用命令发送接口函数...
+  int nResult = this->doSendCommonCmd(kCmd_Screen_Login, lpNewJson, strlen(lpNewJson));
+  // json对象引用计数减少...
+  json_object_put(new_obj);
+  // 返回执行结果...
+  return nResult;
+}
+
+int CTCPClient::doCmdScreenOnLine()
+{
+  return 0;
+}
+
+// 处理Teacher事件...
 int CTCPClient::doTeacherClient(Cmd_Header * lpHeader, const char * lpJsonPtr)
 {
   int nResult = -1;
@@ -684,13 +791,14 @@ int CTCPClient::doCmdTeacherOnLine()
 // 注意：epoll_event.data 是union类型，里面的4个变量不能同时使用，只能使用一个，目前我们用的是fd
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // 统一的通用命令发送接口函数...
-int CTCPClient::doSendCommonCmd(int nCmdID, const char * lpJsonPtr/* = NULL*/, int nJsonSize/* = 0*/)
+int CTCPClient::doSendCommonCmd(int nCmdID, const char * lpJsonPtr/* = NULL*/, int nJsonSize/* = 0*/, int nSockID/* = 0*/)
 {
   // 构造回复结构头信息...
   Cmd_Header theHeader = {0};
   theHeader.m_pkg_len = ((lpJsonPtr != NULL) ? nJsonSize : 0);
   theHeader.m_type = m_nClientType;
   theHeader.m_cmd  = nCmdID;
+  theHeader.m_sock = nSockID;
   // 先填充名头头结构数据内容 => 注意是assign重建字符串...
   m_strSend.assign((char*)&theHeader, sizeof(theHeader));
   // 如果传入的数据内容有效，才进行数据的填充...
