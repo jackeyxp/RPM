@@ -46,8 +46,7 @@ private:
   bool          doTransferToStudentLooker(char * lpBuffer, int inBufSize);
   bool          doDetectForLooker(char * lpBuffer, int inBufSize);
 
-  void          doCalcAVJamStatus();
-  void          doEarseAudioByPTS(uint32_t inTimeStamp);
+  void          doCalcAVJamStatus(bool bIsAudio);
 
   void          doTagAVPackProcess(char * lpBuffer, int inBufSize);
   void          doEraseLoseSeq(uint8_t inPType, uint32_t inSeqID);

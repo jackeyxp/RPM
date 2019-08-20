@@ -62,7 +62,8 @@ bool CStudent::doServerSendDetect()
   if( this->GetIdTag() != ID_TAG_PUSHER )
     return false;
   // 采用了新的拥塞处理 => 删除指定缓存时间点之前的音视频数据包...
-  this->doCalcAVJamStatus();
+  this->doCalcAVJamStatus(false);
+  this->doCalcAVJamStatus(true);
   // 注意：不能探测后，推流端会累积缓存，直到溢出自动删除...
   // 如果有不能进行探测标志，直接返回...
   if( !m_bIsCanDetect )
@@ -105,15 +106,16 @@ uint32_t CStudent::doCalcMaxConSeq(bool bIsAudio)
   return (lpMaxHeader->seq - 1);
 }
 
-void CStudent::doCalcAVJamStatus()
+void CStudent::doCalcAVJamStatus(bool bIsAudio)
 {
-  // 视频环形队列为空，没有拥塞，直接返回...
-  if( m_video_circle.size <= 0 )
+  // 根据数据包类型，找到环形队列...
+  circlebuf  & cur_circle = bIsAudio ? m_audio_circle : m_video_circle;
+  // 环形队列为空，没有拥塞，直接返回...
+  if( cur_circle.size <= 0 )
     return;
   // 遍历环形队列，删除所有超过n秒的缓存数据包 => 不管是否是关键帧或完整包，只是为补包而存在...
   const int nPerPackSize = DEF_MTU_SIZE + sizeof(rtp_hdr_t);
   char szPacketBuffer[nPerPackSize] = {0};
-  circlebuf & cur_circle = m_video_circle;
   rtp_hdr_t * lpCurHeader = NULL;
   uint32_t    min_ts = 0, min_seq = 0;
   uint32_t    max_ts = 0, max_seq = 0;
@@ -143,15 +145,17 @@ void CStudent::doCalcAVJamStatus()
   if (min_ts <= 0 || min_seq <= 0 )
     return;
   // 打印网络拥塞情况 => 就是视频缓存的拥塞情况...
-  //log_trace("[%s-%s] Video Jam => MinSeq: %u, MaxSeq: %u, Circle: %d",
+  //log_trace("[%s-%s] %s Jam => MinSeq: %u, MaxSeq: %u, Circle: %d",
   //          get_tm_tag(this->GetTmTag()), get_id_tag(this->GetIdTag()),
-  //          min_seq, max_seq, cur_circle.size/nPerPackSize);
+  //          bIsAudio ? "Audio" : "Video", min_seq, max_seq,
+  //          cur_circle.size/nPerPackSize);
+  // 2019.08.09 - 调整策略，音频也是由自己单独控制缓存清理，始终保留5秒数据...
   // 删除音频相关时间的数据包 => 包括这个时间戳之前的所有数据包都被删除...
-  this->doEarseAudioByPTS(min_ts);
+  //this->doEarseAudioByPTS(min_ts);
 }
-//
-// 删除音频相关时间的数据包...
-void CStudent::doEarseAudioByPTS(uint32_t inTimeStamp)
+
+// 2019.08.09 - 调整策略，音频也是由自己单独控制缓存清理，始终保留5秒数据...
+/*void CStudent::doEarseAudioByPTS(uint32_t inTimeStamp)
 {
   // 音频环形队列为空，直接返回...
   if (m_audio_circle.size <= 0)
@@ -179,10 +183,10 @@ void CStudent::doEarseAudioByPTS(uint32_t inTimeStamp)
     circlebuf_pop_front(&cur_circle, NULL, nPerPackSize);
   }
   // 打印音频拥塞信息 => 当前位置，已发送数据包 => 两者之差就是观看端的有效补包空间...
-  //log_trace("[%s-%s] Audio Jam => MinSeq: %u, MaxSeq: %u, Circle: %d",
-  //          get_tm_tag(this->GetTmTag()), get_id_tag(this->GetIdTag()),
-  //          min_seq, max_seq, cur_circle.size/nPerPackSize);
-}
+  log_trace("[%s-%s] Audio Jam => MinSeq: %u, MaxSeq: %u, Circle: %d",
+            get_tm_tag(this->GetTmTag()), get_id_tag(this->GetIdTag()),
+            min_seq, max_seq, cur_circle.size/nPerPackSize);
+}*/
 
 bool CStudent::doTagDetect(char * lpBuffer, int inBufSize)
 {
@@ -636,6 +640,7 @@ void CStudent::doTagAVPackProcess(char * lpBuffer, int inBufSize)
   //////////////////////////////////////////////////////////////////////////////////////////////////
   char szPacketBuffer[nPerPackSize] = {0};
   // 如果环形队列为空 => 需要对丢包做提前预判并进行处理...
+  // 注意：环形队列只有最开始为空，因为始终有5秒的缓存供补包使用...
   if( cur_circle.size < nPerPackSize ) {
     // 新到序号包与最大播放包之间有空隙，说明有丢包...
     // 丢包闭区间 => [0 + 1, new_id - 1]
