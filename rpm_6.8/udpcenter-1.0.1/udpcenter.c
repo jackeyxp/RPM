@@ -80,7 +80,7 @@ void doSliceLogFile(struct tm * lpCurTm)
     return;
   // 构造分片文件全路径名称...
   char szNewSliceName[256] = {0};
-  sprintf(szNewSliceName, "%s%s_%d-%02d-%02d_%02d-%02d-%02d.log", g_absolute_path, "udpserver",
+  sprintf(szNewSliceName, "%s%s_%d-%02d-%02d_%02d-%02d-%02d.log", g_absolute_path, "udpcenter",
           1900 + lpCurTm->tm_year, 1 + lpCurTm->tm_mon, lpCurTm->tm_mday,
           lpCurTm->tm_hour, lpCurTm->tm_min, lpCurTm->tm_sec);
   // 对日志文件进行重新命名操作...
