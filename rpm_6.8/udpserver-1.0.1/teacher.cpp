@@ -589,7 +589,8 @@ void CTeacher::doTagAVPackProcess(char * lpBuffer, int inBufSize)
 		return;
 	}
 	// 如果是其它未知包，打印信息...
-	log_trace("[%s-%s] Supply Unknown => Seq: %u, Slice: %d, Min-Max: [%u, %u], Type: %d", lpTMTag, lpIDTag, new_id, lpNewHeader->psize, min_id, max_id, pt_tag);
+	log_trace("[%s-%s] Supply Unknown => Seq: %u, Slice: %d, Min-Max: [%u, %u], Type: %d",
+             lpTMTag, lpIDTag, new_id, lpNewHeader->psize, min_id, max_id, pt_tag);
 }
 //
 // 查看当前包是否需要从丢包队列中删除...
