@@ -77,38 +77,38 @@ bool doRegisterSignal()
   sa.sa_handler = do_sig_catcher;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
-  sigaction(SIGTERM, &sa, NULL);
+  sigaction(SIGTERM, &sa, NULL);   // SIGTERM => 15
  
   sa.sa_handler = do_sig_catcher;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
-  sigaction(SIGINT, &sa, NULL);
+  sigaction(SIGINT, &sa, NULL);   // SIGINT => 2
   
   /* Install do_err_crasher() as a signal handler */
   sa.sa_handler = do_err_crasher;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
-  sigaction(SIGILL, &sa, NULL);   // 非法指令
+  sigaction(SIGILL, &sa, NULL);   // SIGILL => 4 非法指令
 
   sa.sa_handler = do_err_crasher;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
-  sigaction(SIGBUS, &sa, NULL);   // 总线错误
+  sigaction(SIGBUS, &sa, NULL);   // SIGBUS => 7 总线错误
 
   sa.sa_handler = do_err_crasher;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
-  sigaction(SIGFPE, &sa, NULL);   // 浮点异常
+  sigaction(SIGFPE, &sa, NULL);   // SIGFPE => 8 浮点异常
 
   sa.sa_handler = do_err_crasher;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
-  sigaction(SIGABRT, &sa, NULL);  // 来自abort函数的终止信号
+  sigaction(SIGABRT, &sa, NULL);  // SIGABRT => 6 来自abort函数的终止信号
 
   sa.sa_handler = do_err_crasher;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
-  sigaction(SIGSEGV, &sa, NULL);  // 无效的存储器引用(段错误)
+  sigaction(SIGSEGV, &sa, NULL);  // SIGSEGV => 11 无效的存储器引用(段错误)
   
   return true;
 }
@@ -128,6 +128,8 @@ void do_err_crasher(int signo)
   // 打印发生崩溃的信号编号...
   log_trace("udpserver catch err-crash signal=%d", signo);
   //////////////////////////////////////////////////////////////////////////
+  // https://blog.csdn.net/baobao8505/article/details/1115820
+  // https://blog.csdn.net/MOU_IT/article/details/88903668
   // 注意：枚举当前调用堆栈，堆栈信息太少，还要增加编译开关...
   // 注意：需要增加编译开关才会有更详细的函数名称 -rdynamic
   // 注意：不记录崩溃堆栈的原因是由于coredump产生的信息更丰富...
@@ -141,6 +143,9 @@ void do_err_crasher(int signo)
   }*/
   // 最后删除pid文件...
   theApp.destory_pid_file();
+  // 退出前，fork()子进程 => 有问题...
+  //pid_t fpid = fork();
+  //log_trace("== fork result=%d ==", fpid);
 }
 
 // 获取当前进程全路径...
